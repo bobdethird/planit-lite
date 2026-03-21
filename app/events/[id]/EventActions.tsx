@@ -1,8 +1,6 @@
 "use client"
 
 import { useState, useCallback } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import type { Event } from "@/lib/schemas"
 import { Loader2, Link2, Copy, ExternalLink } from "lucide-react"
 
@@ -50,21 +48,13 @@ export function EventActions({
         body: JSON.stringify({ event_id: eventId, phone, vote: v }),
       })
       const data = await res.json()
-      if (!res.ok) {
-        setError(data.error || "Vote failed")
-        return
-      }
-      setMessage(
-        `Vote recorded. Yes: ${data.vote_count.yes}/${data.vote_count.members}. Quorum: ${data.quorum_reached ? "yes" : "no"}`,
-      )
+      if (!res.ok) { setError(data.error || "Vote failed"); return }
+      setMessage(`Vote recorded. Yes: ${data.vote_count.yes}/${data.vote_count.members}. Quorum: ${data.quorum_reached ? "yes" : "no"}`)
       const evRes = await fetch(`/api/events/${encodeURIComponent(eventId)}`)
       const evData = await evRes.json()
       if (evData.event) setEvent(evData.event)
-    } catch {
-      setError("Network error")
-    } finally {
-      setVoteLoading(false)
-    }
+    } catch { setError("Network error") }
+    finally { setVoteLoading(false) }
   }
 
   async function runSchedule(mode: "auto" | "confirm") {
@@ -72,98 +62,75 @@ export function EventActions({
       setError("Enter an ISO datetime (e.g. 2026-03-28T19:00:00.000Z) to confirm a specific time.")
       return
     }
-
     setScheduleLoading(true)
     setError(null)
     setMessage(null)
     try {
-      const body =
-        mode === "confirm"
-          ? { event_id: eventId, scheduled_time: scheduleTime.trim() }
-          : { event_id: eventId }
-
+      const body = mode === "confirm"
+        ? { event_id: eventId, scheduled_time: scheduleTime.trim() }
+        : { event_id: eventId }
       const res = await fetch("/api/schedule", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       })
       const data = await res.json()
-      if (!res.ok) {
-        setError(data.error || "Schedule failed")
-        return
-      }
-      setMessage(
-        data.message === "Already scheduled"
-          ? "Already confirmed."
-          : `Scheduled: ${data.scheduled_time}`,
-      )
+      if (!res.ok) { setError(data.error || "Schedule failed"); return }
+      setMessage(data.message === "Already scheduled" ? "Already confirmed." : `Scheduled: ${data.scheduled_time}`)
       const evRes = await fetch(`/api/events/${encodeURIComponent(eventId)}`)
       const evData = await evRes.json()
       if (evData.event) setEvent(evData.event)
-    } catch {
-      setError("Network error")
-    } finally {
-      setScheduleLoading(false)
-    }
+    } catch { setError("Network error") }
+    finally { setScheduleLoading(false) }
   }
 
   const yesVotes = event.votes.filter((v) => v.vote === "yes").length
   const members = event.group.members.length
   const quorumMet = yesVotes / members >= event.quorum_threshold
 
-  const pageUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/events/${eventId}`
-      : ""
+  const pageUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/events/${eventId}`
+    : ""
 
   return (
-    <div className="flex flex-col gap-4 border-t pt-4">
+    <div className="flex flex-col gap-4 border-t border-[#E7E5E4] pt-4">
       <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="text-xs"
-          onClick={() => copyText("link", pageUrl)}
-        >
-          <Link2 className="size-3.5" />
-          {copied === "link" ? "Copied!" : "Copy link"}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="text-xs"
-          onClick={() => copyText("id", eventId)}
-        >
-          <Copy className="size-3.5" />
-          {copied === "id" ? "Copied!" : "Copy event ID"}
-        </Button>
+        {[
+          { label: "link", text: pageUrl, icon: Link2, display: "Copy link" },
+          { label: "id", text: eventId, icon: Copy, display: "Copy event ID" },
+        ].map(({ label, text, icon: Icon, display }) => (
+          <button
+            key={label}
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-[10px] border border-[#E7E5E4] px-3 py-1.5 text-xs font-medium text-[#1C1917] transition-colors hover:bg-[#F5F5F4]"
+            onClick={() => copyText(label, text)}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {copied === label ? "Copied!" : display}
+          </button>
+        ))}
         {event.itinerary.venue_maps_url && (
-          <Button variant="outline" size="sm" className="text-xs" asChild>
-            <a
-              href={event.itinerary.venue_maps_url}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <ExternalLink className="size-3.5" />
-              Maps
-            </a>
-          </Button>
+          <a
+            href={event.itinerary.venue_maps_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-[10px] border border-[#E7E5E4] px-3 py-1.5 text-xs font-medium text-[#1C1917] transition-colors hover:bg-[#F5F5F4]"
+          >
+            <ExternalLink className="h-3.5 w-3.5" /> Maps
+          </a>
         )}
       </div>
 
       <div>
-        <h3 className="text-sm font-medium">Vote (demo phones)</h3>
-        <p className="text-xs text-muted-foreground">
-          {yesVotes}/{members} yes · quorum {Math.round(event.quorum_threshold * 100)}% ·{" "}
-          {quorumMet ? "met" : "not met"}
+        <h3 className="text-sm font-semibold text-[#1C1917]">Vote (demo phones)</h3>
+        <p className="text-xs text-[#78716C]">
+          {yesVotes}/{members} yes · quorum {Math.round(event.quorum_threshold * 100)}% · {quorumMet ? "met" : "not met"}
         </p>
       </div>
 
       <div className="flex flex-wrap gap-2">
         <select
-          className="h-9 rounded-md border border-input bg-background px-2 text-xs"
+          className="h-9 rounded-xl border border-[#E7E5E4] bg-white px-2 text-xs text-[#1C1917]"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
         >
@@ -173,70 +140,61 @@ export function EventActions({
             </option>
           ))}
         </select>
-        <Button
-          size="sm"
+        <button
           disabled={voteLoading}
           onClick={() => submitVote("yes")}
+          className="inline-flex items-center gap-1 rounded-[10px] bg-[#1C1917] px-3 py-1.5 text-xs font-medium text-white transition-all hover:bg-[#292524] disabled:opacity-50"
         >
-          {voteLoading ? <Loader2 className="animate-spin" /> : null} Yes
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
+          {voteLoading && <Loader2 className="h-3 w-3" style={{ animation: "spin 1s linear infinite" }} />}
+          Yes
+        </button>
+        <button
           disabled={voteLoading}
           onClick={() => submitVote("no")}
+          className="inline-flex items-center rounded-[10px] border border-[#E7E5E4] px-3 py-1.5 text-xs font-medium text-[#1C1917] transition-colors hover:bg-[#F5F5F4] disabled:opacity-50"
         >
           No
-        </Button>
+        </button>
       </div>
 
       <div>
-        <h3 className="text-sm font-medium">Schedule</h3>
-        <p className="mb-2 text-xs text-muted-foreground">
+        <h3 className="text-sm font-semibold text-[#1C1917]">Schedule</h3>
+        <p className="mb-2 text-xs text-[#78716C]">
           Auto-pick needs quorum. Or set an ISO time and confirm (works while voting).
         </p>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-          <Input
-            className="font-mono text-xs"
+          <input
+            className="h-9 min-w-0 flex-1 rounded-xl border border-[#E7E5E4] bg-white px-3 font-mono text-xs text-[#1C1917] outline-none placeholder:text-[#A8A29E] focus:ring-2 focus:ring-[#F97316]/20"
             placeholder="2026-03-28T19:00:00.000Z"
             value={scheduleTime}
             onChange={(e) => setScheduleTime(e.target.value)}
           />
-          <Button
-            size="sm"
-            variant="secondary"
+          <button
             disabled={scheduleLoading || !scheduleTime.trim()}
             onClick={() => runSchedule("confirm")}
+            className="inline-flex items-center gap-1 rounded-[10px] bg-[#F5F5F4] px-3 py-1.5 text-xs font-medium text-[#1C1917] transition-colors hover:bg-[#E7E5E4] disabled:opacity-50"
           >
-            {scheduleLoading ? <Loader2 className="animate-spin" /> : null}
+            {scheduleLoading && <Loader2 className="h-3 w-3" style={{ animation: "spin 1s linear infinite" }} />}
             Confirm time
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
+          </button>
+          <button
             disabled={scheduleLoading || !quorumMet}
             onClick={() => runSchedule("auto")}
             title={!quorumMet ? "Reach quorum first for auto-schedule" : ""}
+            className="inline-flex items-center rounded-[10px] border border-[#E7E5E4] px-3 py-1.5 text-xs font-medium text-[#1C1917] transition-colors hover:bg-[#F5F5F4] disabled:opacity-50"
           >
             Auto slot
-          </Button>
+          </button>
         </div>
       </div>
 
-      {message && (
-        <p className="text-xs text-emerald-700 dark:text-emerald-400">{message}</p>
-      )}
-      {error && (
-        <p className="text-xs text-destructive">{error}</p>
-      )}
+      {message && <p className="text-xs font-medium text-[#10B981]">{message}</p>}
+      {error && <p className="text-xs font-medium text-[#EF4444]">{error}</p>}
 
-      <p className="text-[11px] text-muted-foreground">
-        Status: <code className="rounded bg-muted px-1">{event.status}</code>
+      <p className="text-[11px] text-[#A8A29E]">
+        Status: <code className="rounded-md bg-[#F5F5F4] px-1">{event.status}</code>
         {event.scheduled_time && (
-          <>
-            {" "}
-            · <code className="rounded bg-muted px-1">{event.scheduled_time}</code>
-          </>
+          <> · <code className="rounded-md bg-[#F5F5F4] px-1">{event.scheduled_time}</code></>
         )}
       </p>
     </div>

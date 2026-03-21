@@ -1,20 +1,22 @@
 import Link from "next/link"
-import { Button } from "@/components/ui/button"
 
 export default function NotFound() {
   return (
-    <div className="min-h-svh bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center px-6">
-      <p className="font-mono text-xs text-orange-400 uppercase tracking-widest mb-2">
+    <div className="flex min-h-svh flex-col items-center justify-center px-6">
+      <p className="mb-2 font-mono text-xs uppercase tracking-widest text-[#F97316]">
         404
       </p>
-      <h1 className="font-heading text-2xl font-bold mb-2">Page not found</h1>
-      <p className="text-sm text-zinc-500 text-center max-w-sm mb-8">
-        This URL isn&apos;t part of the VibeSync flow. Head back and drop a reel
+      <h1 className="font-editorial text-2xl font-semibold text-[#1C1917]">Page not found</h1>
+      <p className="mt-2 mb-8 max-w-sm text-center text-sm text-[#78716C]">
+        This URL isn&apos;t part of the PlanIt flow. Head back and drop a reel
         link instead.
       </p>
-      <Button asChild className="bg-orange-500 hover:bg-orange-400 text-white">
-        <Link href="/">Back to VibeSync</Link>
-      </Button>
+      <Link
+        href="/"
+        className="inline-flex items-center rounded-[10px] bg-[#1C1917] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#292524]"
+      >
+        Back to PlanIt
+      </Link>
     </div>
   )
 }

@@ -7,7 +7,7 @@ import type { Event, Group } from "./schemas"
 // Module-level singleton (persists across hot reloads in dev via global)
 declare global {
   // eslint-disable-next-line no-var
-  var __vibesync_store: Store | undefined
+  var __planit_store: Store | undefined
 }
 
 interface Store {
@@ -23,7 +23,7 @@ function createStore(): Store {
 }
 
 export const store: Store =
-  global.__vibesync_store ?? (global.__vibesync_store = createStore())
+  global.__planit_store ?? (global.__planit_store = createStore())
 
 // --- Events ---
 

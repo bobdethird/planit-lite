@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 
 export const metadata: Metadata = {
   title: "Events",
-  description: "Vote and schedule Planit events stored in memory.",
+  description: "Vote and schedule PlanIt events stored in memory.",
 }
 
 export default function EventsLayout({

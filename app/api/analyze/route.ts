@@ -64,7 +64,7 @@ ${transcriptText ? `\nAudio transcript for context: "${transcriptText}"` : ""}
 Be specific and actionable. This data will be used to plan a real group event.`
 
     const { object: videoContext } = await generateObject({
-      model: google("gemini-2.5-flash"),
+      model: google("gemini-3-flash-preview"),
       schema: VideoContextZodSchema,
       messages: [
         {

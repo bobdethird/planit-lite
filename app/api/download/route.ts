@@ -8,7 +8,7 @@ const execFileAsync = promisify(execFile)
 
 const DOWNLOADS_DIR = path.join(process.cwd(), "downloads")
 const COOKIES_PATH = path.join(process.cwd(), "cookies.txt")
-const YTDLP_PATH = "/usr/local/bin/yt-dlp"
+const YTDLP_PATH = process.env.YTDLP_PATH || "/opt/homebrew/bin/yt-dlp"
 
 const ALLOWED_HOSTS = [
   "instagram.com",

@@ -1,9 +1,6 @@
 import Link from "next/link"
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { ArrowLeft } from "lucide-react"
 import { getEvent } from "@/lib/store"
 import { EventActions } from "./EventActions"
@@ -20,7 +17,7 @@ export async function generateMetadata({
   if (!event) return { title: "Event" }
   return {
     title: event.itinerary.title,
-    description: (event.itinerary.description || "Planit event").slice(0, 160),
+    description: (event.itinerary.description || "PlanIt event").slice(0, 160),
   }
 }
 
@@ -36,66 +33,68 @@ export default async function EventDetailPage({
   const { itinerary } = event
 
   return (
-    <div className="mx-auto flex min-h-svh max-w-2xl flex-col gap-6 p-6 md:p-10">
+    <div className="flex min-h-svh flex-col gap-6 px-5 py-6">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon-sm" asChild>
-          <Link href="/events" aria-label="All events">
-            <ArrowLeft className="size-4" />
-          </Link>
-        </Button>
+        <Link
+          href="/events"
+          aria-label="All events"
+          className="flex h-9 w-9 items-center justify-center rounded-xl text-[#78716C] transition-colors hover:bg-[#F5F5F4]"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Link>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="font-heading text-xl font-bold tracking-tight md:text-2xl">
+            <h1 className="font-editorial text-xl font-semibold text-[#1C1917] md:text-2xl">
               {itinerary.title}
             </h1>
-            <Badge>{event.status}</Badge>
+            <span className="rounded-lg bg-[#F5F5F4] px-2.5 py-0.5 text-[11px] font-semibold text-[#78716C]">
+              {event.status}
+            </span>
           </div>
-          <p className="text-sm text-muted-foreground">{itinerary.description}</p>
+          <p className="text-sm text-[#78716C]">{itinerary.description}</p>
         </div>
       </div>
 
-      <Card>
-        <CardContent className="flex flex-col gap-3 py-4 text-sm">
-          <div>
-            <span className="text-muted-foreground">Where</span>
-            <p className="font-medium">{itinerary.venue_name}</p>
-            <p className="text-xs text-muted-foreground">{itinerary.venue_address}</p>
-          </div>
-          <div className="flex flex-wrap gap-4 text-xs">
-            <span>
-              <span className="text-muted-foreground">Cost </span>
-              {itinerary.cost_per_person}
-            </span>
-            <span>
-              <span className="text-muted-foreground">Duration </span>
-              {itinerary.duration_hrs}h
-            </span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Group</span>
-            <p>{event.group.name}</p>
-            <ul className="mt-1 text-xs text-muted-foreground">
-              {event.group.members.map((m) => (
-                <li key={m.id}>
-                  {m.name} — {m.phone}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Agenda</span>
-            <ul className="mt-1 list-inside list-disc text-xs">
-              {itinerary.agenda.map((a, i) => (
-                <li key={i}>
-                  +{a.time_offset_min}m — {a.activity}
-                </li>
-              ))}
-            </ul>
-          </div>
+      <div className="card-shadow flex flex-col gap-3 rounded-2xl border border-[#E7E5E4] bg-white px-5 py-4 text-sm">
+        <div>
+          <span className="text-xs font-medium uppercase tracking-wide text-[#A8A29E]">Where</span>
+          <p className="font-medium text-[#1C1917]">{itinerary.venue_name}</p>
+          <p className="text-xs text-[#78716C]">{itinerary.venue_address}</p>
+        </div>
+        <div className="flex flex-wrap gap-4 text-xs">
+          <span>
+            <span className="text-[#A8A29E]">Cost </span>
+            <span className="font-medium text-[#1C1917]">{itinerary.cost_per_person}</span>
+          </span>
+          <span>
+            <span className="text-[#A8A29E]">Duration </span>
+            <span className="font-medium text-[#1C1917]">{itinerary.duration_hrs}h</span>
+          </span>
+        </div>
+        <div>
+          <span className="text-xs font-medium uppercase tracking-wide text-[#A8A29E]">Group</span>
+          <p className="font-medium text-[#1C1917]">{event.group.name}</p>
+          <ul className="mt-1 text-xs text-[#78716C]">
+            {event.group.members.map((m) => (
+              <li key={m.id}>
+                {m.name} — {m.phone}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <span className="text-xs font-medium uppercase tracking-wide text-[#A8A29E]">Agenda</span>
+          <ul className="mt-1 list-inside list-disc text-xs text-[#78716C]">
+            {itinerary.agenda.map((a, i) => (
+              <li key={i}>
+                +{a.time_offset_min}m — {a.activity}
+              </li>
+            ))}
+          </ul>
+        </div>
 
-          <EventActions eventId={event.id} initialEvent={event} />
-        </CardContent>
-      </Card>
+        <EventActions eventId={event.id} initialEvent={event} />
+      </div>
     </div>
   )
 }

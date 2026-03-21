@@ -2,56 +2,40 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { Home, CalendarDays } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 const NAV_ITEMS = [
-  { href: "/", icon: "home", label: "Home" },
-  { href: "/events", icon: "event_note", label: "Events" },
+  { href: "/", icon: Home, label: "Home" },
+  { href: "/events", icon: CalendarDays, label: "Events" },
 ]
 
 export function NavChrome() {
   const pathname = usePathname()
 
   return (
-    <>
-      {/* ── Navigation Rail (desktop) ───────────────────────────────────── */}
-      <nav className="md-nav-rail hidden md:flex" aria-label="Main navigation">
-        <div className="md-nav-rail__logo" aria-hidden>VS</div>
-
-        {NAV_ITEMS.map(({ href, icon, label }) => {
-          const active = pathname === href || (href !== "/" && pathname.startsWith(href))
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`md-nav-rail__item md-state${active ? " md-nav-rail__item--active" : ""}`}
-            >
-              <div className="md-nav-rail__indicator">
-                <span className="material-symbols-rounded" style={{ fontSize: 24 }}>{icon}</span>
-              </div>
-              <span className="md-nav-rail__label">{label}</span>
-            </Link>
-          )
-        })}
-      </nav>
-
-      {/* ── Bottom Navigation Bar (mobile) ─────────────────────────────── */}
-      <nav className="md-bottom-nav flex md:hidden" aria-label="Main navigation">
-        {NAV_ITEMS.map(({ href, icon, label }) => {
-          const active = pathname === href || (href !== "/" && pathname.startsWith(href))
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`md-bottom-nav__item md-state${active ? " md-bottom-nav__item--active" : ""}`}
-            >
-              <div className="md-bottom-nav__indicator">
-                <span className="material-symbols-rounded" style={{ fontSize: 24 }}>{icon}</span>
-              </div>
-              <span className="md-bottom-nav__label">{label}</span>
-            </Link>
-          )
-        })}
-      </nav>
-    </>
+    <nav
+      className="fixed inset-x-0 bottom-0 z-50 flex h-16 items-stretch border-t border-[#E7E5E4] bg-white/80 backdrop-blur-xl"
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 12px)" }}
+      aria-label="Main navigation"
+    >
+      {NAV_ITEMS.map(({ href, icon: Icon, label }) => {
+        const active =
+          pathname === href || (href !== "/" && pathname.startsWith(href))
+        return (
+          <Link
+            key={href}
+            href={href}
+            className={cn(
+              "flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 transition-colors",
+              active ? "text-[#1C1917]" : "text-[#A8A29E]"
+            )}
+          >
+            <Icon className="h-5 w-5" strokeWidth={active ? 2.5 : 1.8} />
+            <span className="text-[11px] font-medium">{label}</span>
+          </Link>
+        )
+      })}
+    </nav>
   )
 }

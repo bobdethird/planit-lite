@@ -1,5 +1,5 @@
 /**
- * Domain types for Planit (group planning + itineraries).
+ * Domain types for PlanIt (group planning + itineraries).
  * Runtime validation can be added later (e.g. zod) when wiring LLM/MCP flows.
  */
 

@@ -240,7 +240,7 @@ Guidelines:
 - Suggested date window: ${nextWeekend.toISOString()} to ${twoWeeksOut.toISOString()}`
 
     const { object: plan } = await generateObject({
-      model: google("gemini-2.5-flash"),
+      model: google("gemini-3-flash-preview"),
       schema: PlanningOutputSchema,
       prompt,
     })

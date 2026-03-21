@@ -166,7 +166,7 @@ async function createGCalEvent(
 
   const body = {
     summary: title,
-    description: `${description}\n\nPlanit event: ${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/events/${eventId}`,
+    description: `${description}\n\nPlanIt event: ${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/events/${eventId}`,
     location,
     start: {
       dateTime: startTime.toISOString(),

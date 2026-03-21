@@ -2,8 +2,42 @@
 
 import Link from "next/link"
 import { useState, useEffect, useRef } from "react"
-import type { VideoContext, Itinerary, Event as VibeEvent } from "@/lib/schemas"
+import type { VideoContext, Itinerary, Event as PlanItEvent } from "@/lib/schemas"
 import { ItineraryExplorer } from "@/components/ItineraryExplorer"
+import {
+  Download,
+  Mic,
+  Bot,
+  Map,
+  Vote,
+  CalendarCheck,
+  Send,
+  Link2,
+  CheckCircle,
+  XCircle,
+  Check,
+  AlertCircle,
+  Zap,
+  RefreshCw,
+  FlaskConical,
+  Plug,
+  Copy,
+  ArrowRight,
+  Plus,
+  Clock,
+  MapPin,
+  Moon,
+  UtensilsCrossed,
+  Trees,
+  Landmark,
+  Dumbbell,
+  Compass,
+  DollarSign,
+  CreditCard,
+  Gem,
+  Loader2,
+} from "lucide-react"
+import { cn } from "@/lib/utils"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -18,16 +52,25 @@ type AppStage =
   | "scheduling"
   | "confirmed"
 
-const PIPELINE: { stage: AppStage; label: string; icon: string; sub: string }[] = [
-  { stage: "downloading",  label: "Download",   icon: "download",    sub: "yt-dlp → mp4" },
-  { stage: "transcribing", label: "Transcribe", icon: "mic",         sub: "ElevenLabs Scribe v2" },
-  { stage: "analyzing",    label: "Analyze",    icon: "smart_toy",   sub: "Gemini 2.5 Flash" },
-  { stage: "planning",     label: "Plan",       icon: "map",         sub: "Gemini + Google Maps" },
-  { stage: "voting",       label: "Vote",       icon: "how_to_vote", sub: "POKE iMessage" },
-  { stage: "confirmed",    label: "Confirm",    icon: "event_available", sub: "Google Calendar" },
+type AnimPhase = "logo" | "shrink" | "app"
+
+const PIPELINE: {
+  stage: AppStage
+  label: string
+  icon: React.ElementType
+  sub: string
+}[] = [
+  { stage: "downloading", label: "Download", icon: Download, sub: "yt-dlp → mp4" },
+  { stage: "transcribing", label: "Transcribe", icon: Mic, sub: "ElevenLabs Scribe v2" },
+  { stage: "analyzing", label: "Analyze", icon: Bot, sub: "Gemini 3 Flash Preview" },
+  { stage: "planning", label: "Plan", icon: Map, sub: "Gemini + Google Maps" },
+  { stage: "voting", label: "Vote", icon: Vote, sub: "POKE iMessage" },
+  { stage: "confirmed", label: "Confirm", icon: CalendarCheck, sub: "Google Calendar" },
 ]
 
-const PIPELINE_ORDER: AppStage[] = ["downloading","transcribing","analyzing","planning","voting","confirmed"]
+const PIPELINE_ORDER: AppStage[] = [
+  "downloading", "transcribing", "analyzing", "planning", "voting", "confirmed",
+]
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString(undefined, {
@@ -36,71 +79,126 @@ function formatTime(iso: string) {
   })
 }
 
+// ─── Logo SVG ─────────────────────────────────────────────────────────────────
+
+function PlanItLogo({ size = 20, animate = false }: { size?: number; animate?: boolean }) {
+  return (
+    <svg viewBox="0 0 512 512" width={size} height={size}>
+      <path
+        d="M256 62 C186 62 130 118 130 188 C130 268 256 430 256 430 C256 430 382 268 382 188 C382 118 326 62 256 62Z"
+        fill="#F97316"
+      />
+      <ellipse
+        cx="256" cy="198" rx="155" ry="38"
+        fill="none" stroke="#FDBA74" strokeWidth="12" strokeLinecap="round"
+        style={animate ? {
+          strokeDasharray: 700,
+          strokeDashoffset: 700,
+          animation: "ring-draw 1.2s ease-out 0.3s forwards",
+        } : undefined}
+      />
+      <circle cx="256" cy="182" r="20" fill="#FEFCE8" opacity="0.9" />
+      <circle cx="256" cy="182" r="8.5" fill="#F97316" />
+    </svg>
+  )
+}
+
+// ─── Launch Animation ─────────────────────────────────────────────────────────
+
+function LaunchOverlay({ phase }: { phase: AnimPhase }) {
+  if (phase === "app") return null
+
+  return (
+    <>
+      {/* Black backdrop */}
+      <div
+        className="fixed inset-0 z-[100] bg-[#0C0A09]"
+        style={{
+          opacity: phase === "shrink" ? 0 : 1,
+          transition: "opacity 0.5s ease-out 0.1s",
+        }}
+      />
+
+      {/* Animated logo */}
+      <div
+        className="fixed z-[110]"
+        style={{
+          top: phase === "logo" ? "50%" : "14px",
+          left: phase === "logo" ? "50%" : "20px",
+          transform: phase === "logo" ? "translate(-50%, -50%)" : "none",
+          width: phase === "logo" ? "120px" : "32px",
+          height: phase === "logo" ? "120px" : "32px",
+          transition: phase === "shrink"
+            ? "all 0.6s cubic-bezier(0.4, 0, 0.2, 1)"
+            : "none",
+        }}
+      >
+        <div
+          className="flex h-full w-full items-center justify-center"
+          style={phase === "logo" ? {
+            animation: "glow-pulse 1.5s ease-in-out 0.5s 2",
+          } : {
+            background: "#0C0A09",
+            borderRadius: "8px",
+            padding: "6px",
+          }}
+        >
+          <PlanItLogo
+            size={phase === "logo" ? 120 : 20}
+            animate={phase === "logo"}
+          />
+        </div>
+      </div>
+    </>
+  )
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function VibeChips({ context }: { context: VideoContext }) {
-  const catIcon: Record<string, string> = {
-    nightlife: "nightlife", food: "restaurant", outdoors: "park",
-    culture: "museum", sports: "sports_soccer", other: "explore",
+  const catIcon: Record<string, React.ElementType> = {
+    nightlife: Moon, food: UtensilsCrossed, outdoors: Trees,
+    culture: Landmark, sports: Dumbbell, other: Compass,
   }
-  const priceIcon: Record<string, string> = {
-    free: "money_off", "$": "attach_money", "$$": "payments", "$$$": "diamond",
+  const priceIcon: Record<string, React.ElementType> = {
+    free: DollarSign, $: DollarSign, $$: CreditCard, $$$: Gem,
   }
+  const CatIcon = catIcon[context.activity_category] ?? Compass
+  const PriceIcon = priceIcon[context.price_range] ?? DollarSign
+
   return (
-    <div
-      className="md-card md-card-filled"
-      style={{ padding: 20 }}
-    >
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <div style={{
-          width: 40, height: 40, borderRadius: "var(--md-shape-full)",
-          background: "var(--md-primary-container)", color: "var(--md-on-primary-container)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}>
-          <span className="material-symbols-rounded" style={{ fontSize: 20 }}>auto_awesome</span>
-        </div>
-        <div>
-          <p className="md-title-md" style={{ color: "var(--md-on-surface)" }}>Vibe Analysis</p>
-          <p className="md-body-sm" style={{ color: "var(--md-on-surface-variant)" }}>Extracted by Gemini 2.5 Flash</p>
-        </div>
+    <div className="card-shadow rounded-2xl border border-[#E7E5E4] bg-white p-5">
+      <div className="mb-4 flex items-center gap-2.5">
+        <div className="h-2 w-2 rounded-full bg-[#10B981]" />
+        <span className="text-sm font-semibold text-[#1C1917]">Vibe analysis</span>
+        <span className="ml-auto text-xs text-[#A8A29E]">Gemini 3 Flash Preview</span>
       </div>
 
-      {/* Chips */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        <div className="md-chip md-chip--selected md-state">
-          <span className="material-symbols-rounded" style={{ fontSize: 16 }}>{catIcon[context.activity_category] ?? "explore"}</span>
-          {context.activity_category}
-        </div>
-        <div className="md-chip md-chip--selected md-state">
-          <span className="material-symbols-rounded" style={{ fontSize: 16 }}>{priceIcon[context.price_range] ?? "attach_money"}</span>
-          {context.price_range}
-        </div>
-        <div className="md-chip md-state">
-          <span className="material-symbols-rounded" style={{ fontSize: 16 }}>schedule</span>
-          ~{context.duration_estimate_hrs}h
-        </div>
-        {context.location_hint && (
-          <div className="md-chip md-state">
-            <span className="material-symbols-rounded" style={{ fontSize: 16 }}>location_on</span>
-            {context.location_hint}
-          </div>
-        )}
+      <div className="mb-4 flex flex-wrap gap-2">
+        {[
+          { Icon: CatIcon, label: context.activity_category },
+          { Icon: PriceIcon, label: context.price_range },
+          { Icon: Clock, label: `~${context.duration_estimate_hrs}h` },
+          ...(context.location_hint ? [{ Icon: MapPin, label: context.location_hint }] : []),
+        ].map(({ Icon, label }) => (
+          <span
+            key={label}
+            className="inline-flex items-center gap-1.5 rounded-[10px] bg-[#F5F5F4] px-3 py-1.5 text-xs font-medium text-[#1C1917]"
+          >
+            <Icon className="h-3.5 w-3.5 text-[#78716C]" />
+            {label}
+          </span>
+        ))}
       </div>
 
-      {/* Vibe + venue type */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 16 }}>
+      <div className="grid grid-cols-2 gap-3">
         {[
           { label: "Venue type", value: context.venue_type },
           { label: "Vibe", value: context.vibe },
         ].map(({ label, value }) => (
-          <div key={label} style={{
-            background: "var(--md-container-low)",
-            borderRadius: "var(--md-shape-sm)",
-            padding: "12px 14px",
-          }}>
-            <p className="md-label-md" style={{ color: "var(--md-on-surface-variant)", marginBottom: 4 }}>{label}</p>
-            <p className="md-body-md" style={{ color: "var(--md-on-surface)", fontWeight: 500 }}>{value}</p>
+          <div key={label} className="rounded-xl bg-[#F5F5F4] p-3">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-[#A8A29E]">{label}</p>
+            <p className="mt-1 text-sm font-semibold text-[#1C1917]">{value}</p>
           </div>
         ))}
       </div>
@@ -110,67 +208,51 @@ function VibeChips({ context }: { context: VideoContext }) {
 
 function PipelineCard({ stage }: { stage: AppStage }) {
   const curIdx = PIPELINE_ORDER.indexOf(stage)
-  const step = PIPELINE.find(p => p.stage === stage)
+  const step = PIPELINE.find((p) => p.stage === stage)
+  const StepIcon = step?.icon ?? Loader2
 
   return (
-    <div className="md-card md-card-elevated" style={{ padding: "20px 20px 16px" }}>
-      {/* Current step header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
-        <div style={{
-          width: 48, height: 48, borderRadius: "var(--md-shape-full)",
-          background: "var(--md-primary-container)", color: "var(--md-on-primary-container)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          flexShrink: 0,
-          animation: "spin 1.5s linear infinite",
-        }}>
-          <span className="material-symbols-rounded" style={{ fontSize: 24 }}>{step?.icon ?? "sync"}</span>
+    <div className="card-shadow rounded-2xl border border-[#E7E5E4] bg-white p-5">
+      <div className="mb-5 flex items-center gap-4">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#FFF7ED]">
+          <StepIcon className="h-5 w-5 text-[#F97316]" style={{ animation: "spin 1.5s linear infinite" }} />
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p className="md-title-md" style={{ color: "var(--md-on-surface)" }}>
-            {stage === "downloading"  && "Downloading your reel…"}
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-[#1C1917]">
+            {stage === "downloading" && "Downloading your reel…"}
             {stage === "transcribing" && "Transcribing audio…"}
-            {stage === "analyzing"    && "Gemini is watching the video…"}
-            {stage === "planning"     && "Building your itinerary…"}
-            {stage === "scheduling"   && "Finding the best time…"}
+            {stage === "analyzing" && "Gemini is watching the video…"}
+            {stage === "planning" && "Building your itinerary…"}
+            {stage === "scheduling" && "Finding the best time…"}
           </p>
-          <p className="md-body-sm" style={{ color: "var(--md-on-surface-variant)", marginTop: 2 }}>{step?.sub}</p>
+          <p className="mt-0.5 text-xs text-[#A8A29E]">{step?.sub}</p>
         </div>
       </div>
 
-      {/* M3 Linear Progress */}
-      <div className="md-linear-progress" style={{ marginBottom: 12 }}>
-        <div className="md-linear-progress__track md-linear-progress--indeterminate" style={{ width: "35%" }} />
+      <div className="mb-3 h-1 overflow-hidden rounded-full bg-[#F5F5F4]">
+        <div
+          className="h-full rounded-full bg-[#F97316]"
+          style={{ width: "35%", animation: "indeterminate 1.6s infinite cubic-bezier(0.4,0,0.2,1)" }}
+        />
       </div>
 
-      {/* Step indicators */}
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      <div className="flex items-center gap-1">
         {PIPELINE.map(({ stage: s, label }, i) => {
           const idx = PIPELINE_ORDER.indexOf(s)
           const done = idx < curIdx
           const active = idx === curIdx
           return (
-            <div key={s} style={{ display: "flex", alignItems: "center", gap: 4, flex: 1 }}>
-              <div style={{
-                flex: 1,
-                height: 24,
-                borderRadius: "var(--md-shape-full)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: done
-                  ? "var(--md-primary)"
-                  : active
-                  ? "var(--md-primary-container)"
-                  : "var(--md-container)",
-                transition: `background var(--md-dur-medium) var(--md-easing-standard)`,
-              }}>
-                {done
-                  ? <span className="material-symbols-rounded" style={{ fontSize: 14, color: "var(--md-on-primary)" }}>check</span>
-                  : <span className="md-label-sm" style={{ color: active ? "var(--md-on-primary-container)" : "var(--md-on-surface-variant)" }}>{label}</span>
-                }
+            <div key={s} className="flex flex-1 items-center gap-1">
+              <div className={cn(
+                "flex h-6 flex-1 items-center justify-center rounded-md transition-colors",
+                done ? "bg-[#F97316] text-white"
+                  : active ? "bg-[#FFF7ED] text-[#F97316]"
+                  : "bg-[#F5F5F4] text-[#A8A29E]"
+              )}>
+                {done ? <Check className="h-3 w-3" /> : <span className="text-[10px] font-medium">{label}</span>}
               </div>
               {i < PIPELINE.length - 1 && (
-                <div style={{ width: 4, height: 1, background: done ? "var(--md-primary)" : "var(--md-outline-variant)", flexShrink: 0 }} />
+                <div className={cn("h-px w-1 shrink-0", done ? "bg-[#F97316]" : "bg-[#E7E5E4]")} />
               )}
             </div>
           )
@@ -180,132 +262,92 @@ function PipelineCard({ stage }: { stage: AppStage }) {
   )
 }
 
-function VoteCard({ event, onRefresh }: { event: VibeEvent; onRefresh: () => void }) {
-  const yes = event.votes.filter(v => v.vote === "yes").length
+const AVATAR_COLORS = ["#F97316", "#3B82F6", "#10B981", "#8B5CF6", "#EC4899", "#EAB308"]
+
+function VoteCard({ event, onRefresh }: { event: PlanItEvent; onRefresh: () => void }) {
+  const yes = event.votes.filter((v) => v.vote === "yes").length
   const total = event.group.members.length
   const pct = Math.min(100, (yes / total) * 100)
   const quorum = Math.ceil(total * event.quorum_threshold)
 
-  const statusColor = event.status === "confirmed"
-    ? "var(--md-tertiary)"
-    : event.status === "quorum_reached"
-    ? "var(--md-primary)"
-    : "var(--md-secondary)"
-
   return (
-    <div className="md-card md-card-outlined">
-      {/* Header */}
-      <div style={{
-        padding: "16px 16px 12px",
-        display: "flex", alignItems: "center", gap: 12,
-        borderBottom: "1px solid var(--md-outline-variant)",
-      }}>
-        <div style={{
-          width: 40, height: 40, borderRadius: "var(--md-shape-full)",
-          background: "var(--md-tertiary-container)", color: "var(--md-on-tertiary-container)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          flexShrink: 0,
-        }}>
-          <span className="material-symbols-rounded" style={{ fontSize: 20 }}>how_to_vote</span>
-        </div>
-        <div style={{ flex: 1 }}>
-          <p className="md-title-md" style={{ color: "var(--md-on-surface)" }}>Group Vote</p>
-          <p className="md-body-sm" style={{ color: "var(--md-on-surface-variant)" }}>
-            {yes} of {total} responded · need {quorum} for quorum
-          </p>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div className="md-chip md-chip--assist" style={{
-            height: 28,
-            background: `color-mix(in oklch, ${statusColor} 12%, transparent)`,
-            color: statusColor,
-            border: "none",
-            padding: "0 12px",
-          }}>
-            <span className="md-label-md">{event.status.replace("_", " ")}</span>
-          </div>
-          <button
-            onClick={onRefresh}
-            className="md-icon-btn md-state"
-            style={{ width: 40, height: 40 }}
-            aria-label="Refresh"
-          >
-            <span className="material-symbols-rounded" style={{ fontSize: 20 }}>refresh</span>
+    <div className="card-shadow overflow-hidden rounded-2xl border border-[#E7E5E4] bg-white">
+      <div className="flex items-center justify-between border-b border-[#F5F5F4] px-5 py-3">
+        <span className="text-sm font-semibold text-[#1C1917]">Group vote</span>
+        <div className="flex items-center gap-2">
+          <span className={cn(
+            "inline-flex items-center gap-1 rounded-[10px] px-2.5 py-1 text-[11px] font-semibold",
+            event.status === "confirmed"
+              ? "bg-[#ECFDF5] text-[#10B981]"
+              : "bg-[#FFF7ED] text-[#F97316]"
+          )}>
+            {event.status === "confirmed" ? "Confirmed" : "Voting"}
+          </span>
+          <button onClick={onRefresh} className="rounded-lg p-1.5 text-[#A8A29E] transition-colors hover:bg-[#F5F5F4] hover:text-[#1C1917]" aria-label="Refresh">
+            <RefreshCw className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      {/* Progress */}
-      <div style={{ padding: "12px 16px 0" }}>
-        <div className="md-linear-progress">
-          <div className="md-linear-progress__track" style={{ width: `${pct}%` }} />
+      <div className="px-5 pt-4">
+        <p className="mb-2 text-xs text-[#78716C]">
+          {yes} of {total} responded · need {quorum} for quorum
+        </p>
+        <div className="h-1.5 overflow-hidden rounded-full bg-[#F5F5F4]">
+          <div
+            className="h-full rounded-full bg-[#F97316] transition-all"
+            style={{ width: `${pct}%`, transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)" }}
+          />
         </div>
       </div>
 
-      {/* Members list */}
-      <div>
-        {event.group.members.map((member, i) => {
-          const vote = event.votes.find(v => v.user_id === member.id)
-          const initials = member.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
+      <div className="divide-y divide-[#F5F5F4] px-5">
+        {event.group.members.map((member, mi) => {
+          const vote = event.votes.find((v) => v.user_id === member.id)
+          const initial = member.name[0]?.toUpperCase() ?? "?"
+          const color = AVATAR_COLORS[mi % AVATAR_COLORS.length]
           return (
-            <div key={member.id}>
-              {i > 0 && <div className="md-divider" style={{ marginLeft: 72 }} />}
-              <div className="md-list-item">
-                <div className="md-list-item__leading md-list-item__leading--primary-container">
-                  {initials}
-                </div>
-                <div className="md-list-item__content">
-                  <p className="md-list-item__headline">{member.name}</p>
-                  <p className="md-list-item__supporting">{member.phone}</p>
-                </div>
-                <div className="md-list-item__trailing">
-                  {vote ? (
-                    vote.vote === "yes" ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--md-tertiary)" }}>
-                        <span className="material-symbols-rounded" style={{ fontSize: 18 }}>check_circle</span>
-                        <span className="md-label-md">In</span>
-                      </div>
-                    ) : (
-                      <div style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--md-error)" }}>
-                        <span className="material-symbols-rounded" style={{ fontSize: 18 }}>cancel</span>
-                        <span className="md-label-md">Skip</span>
-                      </div>
-                    )
+            <div key={member.id} className="flex items-center gap-3 py-3">
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                style={{ backgroundColor: color }}
+              >
+                {initial}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-[#1C1917]">{member.name}</p>
+                <p className="text-xs text-[#A8A29E]">{member.phone}</p>
+              </div>
+              <div className="shrink-0">
+                {vote ? (
+                  vote.vote === "yes" ? (
+                    <span className="flex items-center gap-1 text-xs font-semibold text-[#10B981]">
+                      <CheckCircle className="h-4 w-4" /> In
+                    </span>
                   ) : (
-                    <span className="md-label-md" style={{ color: "var(--md-on-surface-variant)" }}>Waiting…</span>
-                  )}
-                </div>
+                    <span className="flex items-center gap-1 text-xs font-semibold text-[#EF4444]">
+                      <XCircle className="h-4 w-4" /> Skip
+                    </span>
+                  )
+                ) : (
+                  <span className="text-xs text-[#A8A29E]">Waiting…</span>
+                )}
               </div>
             </div>
           )
         })}
       </div>
 
-      {/* Banners */}
       {event.status === "quorum_reached" && (
-        <div style={{
-          margin: "0 16px 16px",
-          padding: "12px 16px",
-          borderRadius: "var(--md-shape-sm)",
-          background: "var(--md-primary-container)",
-          color: "var(--md-on-primary-container)",
-          display: "flex", alignItems: "center", gap: 12,
-        }}>
-          <span className="material-symbols-rounded" style={{ fontSize: 20 }}>bolt</span>
-          <p className="md-body-md">Quorum reached! Finding the best time for everyone…</p>
+        <div className="mx-5 mb-4 flex items-center gap-2.5 rounded-xl bg-[#FFF7ED] p-3">
+          <Zap className="h-4 w-4 shrink-0 text-[#F97316]" />
+          <p className="text-xs font-medium text-[#F97316]">Quorum reached! Finding the best time…</p>
         </div>
       )}
       {event.status === "confirmed" && event.scheduled_time && (
-        <div style={{
-          margin: "0 16px 16px",
-          padding: "12px 16px",
-          borderRadius: "var(--md-shape-sm)",
-          background: "var(--md-tertiary-container)",
-          color: "var(--md-on-tertiary-container)",
-          display: "flex", alignItems: "center", gap: 12,
-        }}>
-          <span className="material-symbols-rounded" style={{ fontSize: 20 }}>event_available</span>
-          <p className="md-body-md">
+        <div className="mx-5 mb-4 flex items-center gap-2.5 rounded-xl bg-[#ECFDF5] p-3">
+          <CalendarCheck className="h-4 w-4 shrink-0 text-[#10B981]" />
+          <p className="text-xs font-medium text-[#10B981]">
             Scheduled for <strong>{formatTime(event.scheduled_time)}</strong>
           </p>
         </div>
@@ -314,53 +356,41 @@ function VoteCard({ event, onRefresh }: { event: VibeEvent; onRefresh: () => voi
   )
 }
 
-function DemoVotePanel({ event, onVote }: { event: VibeEvent; onVote: (phone: string, vote: "yes" | "no") => void }) {
+function DemoVotePanel({ event, onVote }: { event: PlanItEvent; onVote: (phone: string, vote: "yes" | "no") => void }) {
   return (
-    <div className="md-card md-card-outlined" style={{ padding: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <span className="material-symbols-rounded" style={{ fontSize: 18, color: "var(--md-on-surface-variant)" }}>science</span>
-        <p className="md-label-lg" style={{ color: "var(--md-on-surface-variant)" }}>Demo — simulate friend votes</p>
+    <div className="card-shadow rounded-2xl border border-[#E7E5E4] bg-white p-5">
+      <div className="mb-3 flex items-center gap-2 text-[#A8A29E]">
+        <FlaskConical className="h-4 w-4" />
+        <p className="text-xs font-medium">Demo — simulate friend votes</p>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-        {event.group.members.map(member => {
-          const voted = event.votes.find(v => v.user_id === member.id)
+      <div className="grid grid-cols-2 gap-2">
+        {event.group.members.map((member) => {
+          const voted = event.votes.find((v) => v.user_id === member.id)
           return (
-            <div key={member.id} style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "10px 12px",
-              borderRadius: "var(--md-shape-sm)",
-              background: voted?.vote === "yes"
-                ? "var(--md-tertiary-container)"
-                : voted?.vote === "no"
-                ? "var(--md-error-container)"
-                : "var(--md-container)",
-              transition: `background var(--md-dur-short) var(--md-easing-standard)`,
-            }}>
-              <span className="md-label-lg" style={{
-                color: voted?.vote === "yes"
-                  ? "var(--md-on-tertiary-container)"
-                  : voted?.vote === "no"
-                  ? "var(--md-on-error-container)"
-                  : "var(--md-on-surface)",
-              }}>{member.name}</span>
-              <div style={{ display: "flex", gap: 2 }}>
-                {(["yes", "no"] as const).map(v => (
+            <div
+              key={member.id}
+              className={cn(
+                "flex items-center justify-between rounded-xl p-3 transition-colors",
+                voted?.vote === "yes" ? "bg-[#ECFDF5]"
+                  : voted?.vote === "no" ? "bg-red-50"
+                  : "bg-[#F5F5F4]"
+              )}
+            >
+              <span className={cn(
+                "text-sm font-medium",
+                voted?.vote === "yes" ? "text-[#10B981]"
+                  : voted?.vote === "no" ? "text-[#EF4444]"
+                  : "text-[#1C1917]"
+              )}>{member.name}</span>
+              <div className="flex gap-1">
+                {(["yes", "no"] as const).map((v) => (
                   <button
                     key={v}
                     onClick={() => onVote(member.phone, v)}
-                    className="md-state"
-                    style={{
-                      padding: "4px 8px",
-                      borderRadius: "var(--md-shape-xs)",
-                      border: "none",
-                      background: voted?.vote === v
-                        ? v === "yes" ? "var(--md-tertiary)" : "var(--md-error)"
-                        : "transparent",
-                      cursor: "pointer",
-                      fontSize: 16,
-                    }}
+                    className={cn(
+                      "rounded-lg px-2 py-1 text-sm transition-all hover:scale-110 active:scale-95",
+                      voted?.vote === v && (v === "yes" ? "bg-[#10B981] text-white" : "bg-[#EF4444] text-white")
+                    )}
                   >
                     {v === "yes" ? "👍" : "👎"}
                   </button>
@@ -374,57 +404,46 @@ function DemoVotePanel({ event, onVote }: { event: VibeEvent; onVote: (phone: st
   )
 }
 
-function McpCard({ event, origin }: { event: VibeEvent; origin: string }) {
+function McpCard({ event, origin }: { event: PlanItEvent; origin: string }) {
   const [copied, setCopied] = useState(false)
   const url = `${origin}/api/mcp`
-  const tools = ["get_group_contacts","get_itinerary","get_member_availability","record_vote","confirm_event"]
+  const tools = ["get_group_contacts", "get_itinerary", "get_member_availability", "record_vote", "confirm_event"]
 
   return (
-    <div className="md-card md-card-filled" style={{ padding: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-        <span className="material-symbols-rounded" style={{ fontSize: 20, color: "var(--md-primary)" }}>api</span>
-        <p className="md-title-sm" style={{ color: "var(--md-on-surface)", flex: 1 }}>POKE MCP Server</p>
-        <div className="md-chip md-chip--selected md-chip--assist" style={{ height: 26, padding: "0 10px" }}>
-          <span className="material-symbols-rounded" style={{ fontSize: 14 }}>fiber_manual_record</span>
-          <span className="md-label-sm">Live</span>
+    <div className="overflow-hidden rounded-2xl bg-[#1C1917] p-5">
+      <div className="mb-3 flex items-center gap-2.5">
+        <div className="relative flex h-2 w-2 items-center justify-center">
+          <span className="absolute inline-flex h-full w-full rounded-full bg-[#10B981] opacity-75" style={{ animation: "pulse-green 2s infinite" }} />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-[#10B981]" />
         </div>
+        <span className="text-sm font-semibold text-white">POKE MCP Server</span>
+        <span className="ml-auto rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-medium text-[#10B981]">Connected</span>
       </div>
 
-      <p className="md-body-sm" style={{ color: "var(--md-on-surface-variant)", marginBottom: 10, fontFamily: "monospace" }}>
+      <p className="mb-3 font-mono text-[11px] text-white/40">
         POST /api/mcp · event {event.id.slice(0, 8)}…
       </p>
 
       {origin && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-          <div style={{
-            flex: 1, minWidth: 0,
-            padding: "8px 12px",
-            borderRadius: "var(--md-shape-xs)",
-            background: "var(--md-container-low)",
-            fontFamily: "monospace",
-            fontSize: 12,
-            color: "var(--md-on-surface-variant)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}>
+        <div className="mb-3 flex items-center gap-2">
+          <div className="min-w-0 flex-1 truncate rounded-lg bg-white/5 px-3 py-2 font-mono text-[11px] text-white/50">
             {url}
           </div>
           <button
-            className="md-btn md-btn-text md-state"
+            className="flex items-center gap-1 rounded-lg px-3 py-2 text-[11px] font-medium text-white/70 transition-colors hover:bg-white/10"
             onClick={() => { void navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
           >
-            <span className="material-symbols-rounded" style={{ fontSize: 18 }}>{copied ? "check" : "content_copy"}</span>
+            {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
             {copied ? "Copied" : "Copy"}
           </button>
         </div>
       )}
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-        {tools.map(t => (
-          <div key={t} className="md-chip md-chip--assist md-state" style={{ height: 28, padding: "0 10px", borderRadius: "var(--md-shape-xs)", fontFamily: "monospace", fontSize: 11 }}>
+      <div className="flex flex-wrap gap-1.5">
+        {tools.map((t) => (
+          <span key={t} className="rounded-md bg-white/8 px-2 py-1 font-mono text-[10px] text-white/50">
             {t}()
-          </div>
+          </span>
         ))}
       </div>
     </div>
@@ -439,9 +458,10 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null)
   const [videoContext, setVideoContext] = useState<VideoContext | null>(null)
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
-  const [event, setEvent] = useState<VibeEvent | null>(null)
+  const [event, setEvent] = useState<PlanItEvent | null>(null)
   const [origin, setOrigin] = useState("")
   const [scrolled, setScrolled] = useState(false)
+  const [phase, setPhase] = useState<AnimPhase>("logo")
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => { setOrigin(window.location.origin) }, [])
@@ -449,6 +469,13 @@ export default function Page() {
     const onScroll = () => setScrolled(window.scrollY > 4)
     window.addEventListener("scroll", onScroll)
     return () => window.removeEventListener("scroll", onScroll)
+  }, [])
+
+  // Launch animation
+  useEffect(() => {
+    const t1 = setTimeout(() => setPhase("shrink"), 1600)
+    const t2 = setTimeout(() => setPhase("app"), 2200)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
   }, [])
 
   // Poll event during voting
@@ -468,7 +495,7 @@ export default function Page() {
       } catch { /* ignore */ }
     }, 3000)
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event?.id, event?.status])
 
   async function triggerSchedule(eventId: string) {
@@ -542,212 +569,154 @@ export default function Page() {
     } catch { /* ignore */ }
   }
 
-  const isProcessing = ["downloading","transcribing","analyzing","planning","scheduling"].includes(stage)
+  const isProcessing = ["downloading", "transcribing", "analyzing", "planning", "scheduling"].includes(stage)
   const showInput = stage === "idle" || stage === "confirmed"
+  const appVisible = phase === "app"
 
   return (
-    <div style={{ minHeight: "100svh", background: "var(--md-background)" }}>
+    <>
+      <LaunchOverlay phase={phase} />
 
-      {/* ── Top App Bar ─────────────────────────────────────────────────── */}
-      <header className={`md-top-app-bar${scrolled ? " md-top-app-bar--scrolled" : ""}`}>
-        <div style={{ width: 8 }} />
-        <p className="md-top-app-bar__title">VibeSync</p>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          {stage !== "idle" && (
-            <div className="md-chip md-chip--assist" style={{
-              height: 28,
-              padding: "0 12px",
-              background: stage === "confirmed"
-                ? "var(--md-tertiary-container)"
-                : isProcessing
-                ? "var(--md-primary-container)"
-                : "var(--md-secondary-container)",
-              color: stage === "confirmed"
-                ? "var(--md-on-tertiary-container)"
-                : isProcessing
-                ? "var(--md-on-primary-container)"
-                : "var(--md-on-secondary-container)",
-              border: "none",
-            }}>
-              {isProcessing && <span className="material-symbols-rounded" style={{ fontSize: 14, animation: "spin 1.5s linear infinite" }}>sync</span>}
-              {stage === "confirmed" && <span className="material-symbols-rounded" style={{ fontSize: 14 }}>check_circle</span>}
-              <span className="md-label-md">
+      <div style={{ opacity: appVisible ? 1 : 0, transition: "opacity 0.4s ease-out" }}>
+        {/* ── Sticky Top Bar ──────────────────────────────────────────── */}
+        <header
+          className={cn(
+            "sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-[#E7E5E4] bg-white/80 px-5 backdrop-blur-2xl transition-shadow",
+            scrolled && "shadow-sm"
+          )}
+        >
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0C0A09]">
+            <PlanItLogo size={20} />
+          </div>
+          <span className="font-editorial text-base font-semibold text-[#1C1917]">PlanIt</span>
+
+          <div className="ml-auto flex items-center gap-2">
+            {stage !== "idle" && (
+              <span className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                stage === "confirmed" ? "bg-[#ECFDF5] text-[#10B981]"
+                  : isProcessing ? "bg-[#FFF7ED] text-[#F97316]"
+                  : "bg-[#FFF7ED] text-[#F97316]"
+              )}>
+                {isProcessing && <Loader2 className="h-3 w-3" style={{ animation: "spin 1s linear infinite" }} />}
+                {stage === "confirmed" && <CheckCircle className="h-3 w-3" />}
                 {stage === "confirmed" ? "Confirmed!" : stage === "voting" ? "Voting open" : stage.charAt(0).toUpperCase() + stage.slice(1) + "…"}
               </span>
-            </div>
-          )}
-          <button className="md-icon-btn md-state" aria-label="Hackathon badge">
-            <span className="material-symbols-rounded" style={{ fontSize: 20, color: "var(--md-primary)" }}>workspace_premium</span>
-          </button>
-        </div>
-      </header>
-
-      {/* ── Content ─────────────────────────────────────────────────────── */}
-      <main style={{ maxWidth: 680, margin: "0 auto", padding: "24px 16px 40px" }}>
-
-        {/* Hero */}
-        <div style={{ marginBottom: 28 }}>
-          <p className="md-label-lg" style={{
-            color: "var(--md-primary)",
-            marginBottom: 8,
-            display: "flex", alignItems: "center", gap: 6,
-          }}>
-            <span className="material-symbols-rounded" style={{ fontSize: 16 }}>bolt</span>
-            Zero to Agent Hackathon SF · Mar 21, 2026
-          </p>
-          <h1 className="md-headline-md" style={{ color: "var(--md-on-surface)", marginBottom: 10 }}>
-            Drop a reel. We&apos;ll plan the night.
-          </h1>
-          <p className="md-body-lg" style={{ color: "var(--md-on-surface-variant)", maxWidth: 520 }}>
-            Gemini reads the vibe, Google Maps finds the venue, POKE texts your group on iMessage, and everyone&apos;s calendar gets booked.
-          </p>
-        </div>
-
-        {/* Search bar */}
-        {showInput && (
-          <form
-            onSubmit={e => { e.preventDefault(); handleAnalyze() }}
-            style={{ marginBottom: 24 }}
-          >
-            <div className="md-search-bar">
-              <span className="material-symbols-rounded" style={{ fontSize: 22, color: "var(--md-on-surface-variant)", flexShrink: 0 }}>link</span>
-              <input
-                className="md-search-bar__input"
-                value={url}
-                onChange={e => { setUrl(e.target.value); setError(null) }}
-                placeholder="Paste a TikTok or Instagram reel link…"
-              />
-              <button
-                type="submit"
-                disabled={!url.trim()}
-                className="md-btn md-btn-filled md-state"
-                style={{ flexShrink: 0, height: 40, padding: "0 20px" }}
-              >
-                <span className="material-symbols-rounded" style={{ fontSize: 18 }}>send</span>
-                Go
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Pipeline progress */}
-        {isProcessing && <div style={{ marginBottom: 20 }}><PipelineCard stage={stage} /></div>}
-
-        {/* Error */}
-        {error && (
-          <div style={{
-            display: "flex", alignItems: "flex-start", gap: 12,
-            padding: "14px 16px",
-            borderRadius: "var(--md-shape-sm)",
-            background: "var(--md-error-container)",
-            color: "var(--md-on-error-container)",
-            marginBottom: 20,
-          }}>
-            <span className="material-symbols-rounded" style={{ fontSize: 20, flexShrink: 0, marginTop: 1 }}>error</span>
-            <p className="md-body-md">{error}</p>
-          </div>
-        )}
-
-        {/* Vibe analysis */}
-        {videoContext && <div style={{ marginBottom: 20 }}><VibeChips context={videoContext} /></div>}
-
-        {/* Itinerary */}
-        {itinerary && <div style={{ marginBottom: 20 }}><ItineraryExplorer itinerary={itinerary} /></div>}
-
-        {/* Event / voting section */}
-        {event && stage !== "idle" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {/* Event meta */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <p className="md-body-sm" style={{ color: "var(--md-on-surface-variant)", fontFamily: "monospace" }}>
-                event · {event.id.slice(0, 8)}…
-              </p>
-              <Link href={`/events/${event.id}`} className="md-btn md-btn-text md-state" style={{ height: 32, padding: "0 8px", fontSize: 13 }}>
-                Open event
-                <span className="material-symbols-rounded" style={{ fontSize: 16 }}>arrow_forward</span>
-              </Link>
-            </div>
-
-            <VoteCard event={event} onRefresh={async () => {
-              const res = await fetch(`/api/events/${event.id}`)
-              const data = await res.json()
-              if (data.event) setEvent(data.event)
-            }} />
-
-            {(stage === "voting" || stage === "quorum_reached") && (
-              <DemoVotePanel event={event} onVote={handleDemoVote} />
             )}
+          </div>
+        </header>
 
-            {/* Confirmed */}
-            {stage === "confirmed" && event.scheduled_time && (
-              <div className="md-card md-card-filled" style={{ padding: "32px 24px", textAlign: "center" }}>
-                <div style={{
-                  width: 64, height: 64, borderRadius: "var(--md-shape-full)",
-                  background: "var(--md-tertiary-container)", color: "var(--md-on-tertiary-container)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  margin: "0 auto 16px",
-                }}>
-                  <span className="material-symbols-rounded" style={{ fontSize: 32 }}>event_available</span>
-                </div>
-                <h2 className="md-headline-sm" style={{ color: "var(--md-on-surface)", marginBottom: 8 }}>You&apos;re all set!</h2>
-                <p className="md-body-md" style={{ color: "var(--md-on-surface-variant)", marginBottom: 24, maxWidth: 360, margin: "0 auto 24px" }}>
-                  <strong style={{ color: "var(--md-on-surface)" }}>{event.itinerary.title}</strong> is locked in for{" "}
-                  <strong style={{ color: "var(--md-on-surface)" }}>{formatTime(event.scheduled_time)}</strong>.
-                  Calendar invites sent to all confirmed members.
-                </p>
+        {/* ── Content ─────────────────────────────────────────────────── */}
+        <main className="space-y-5 overflow-x-hidden px-5 pt-6">
+          {/* Hero */}
+          <div className="anim-fade-up" style={{ animationDelay: "0s" }}>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-[#F97316]">
+              Zero to Agent Hackathon SF
+            </p>
+            <h2 className="font-editorial text-[28px] font-semibold leading-tight text-[#1C1917]">
+              Drop a reel.<br />We&apos;ll plan the night.
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-[#78716C]">
+              Gemini reads the vibe, Google Maps finds the venue, POKE texts your
+              group on iMessage, and everyone&apos;s calendar gets booked.
+            </p>
+          </div>
+
+          {/* Input bar */}
+          {showInput && (
+            <form onSubmit={(e) => { e.preventDefault(); handleAnalyze() }} className="anim-fade-up" style={{ animationDelay: "0.1s" }}>
+              <div className="card-shadow flex items-center gap-2 rounded-2xl border border-[#E7E5E4] bg-white p-2">
+                <Link2 className="ml-2 h-5 w-5 shrink-0 text-[#A8A29E]" />
+                <input
+                  value={url}
+                  onChange={(e) => { setUrl(e.target.value); setError(null) }}
+                  placeholder="Paste a TikTok or Instagram reel link…"
+                  className="min-w-0 flex-1 border-0 bg-transparent text-sm text-[#1C1917] outline-none placeholder:text-[#A8A29E]"
+                />
                 <button
-                  className="md-btn md-btn-tonal md-state"
-                  onClick={() => { setStage("idle"); setVideoContext(null); setItinerary(null); setEvent(null) }}
+                  type="submit"
+                  disabled={!url.trim()}
+                  className="flex min-h-[36px] items-center gap-1.5 rounded-[10px] bg-[#1C1917] px-4 text-sm font-medium text-white transition-all hover:bg-[#292524] disabled:opacity-30"
                 >
-                  <span className="material-symbols-rounded" style={{ fontSize: 18 }}>add</span>
-                  Plan another event
+                  <Send className="h-3.5 w-3.5" />
+                  Analyze
                 </button>
               </div>
-            )}
+            </form>
+          )}
 
-            {origin && <McpCard event={event} origin={origin} />}
-          </div>
-        )}
+          {/* Pipeline */}
+          {isProcessing && (
+            <div className="anim-fade-up"><PipelineCard stage={stage} /></div>
+          )}
 
-        {/* How it works */}
-        {stage === "idle" && !event && (
-          <div style={{ marginTop: 8 }}>
-            <p className="md-label-lg" style={{ color: "var(--md-on-surface-variant)", marginBottom: 16, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-              How it works
-            </p>
-            <div className="md-card md-card-outlined" style={{ overflow: "hidden" }}>
-              {[
-                { icon: "download",      color: "var(--md-primary-container)",   onColor: "var(--md-on-primary-container)",   label: "Download",      desc: "yt-dlp grabs the MP4 from TikTok or Instagram Reels" },
-                { icon: "smart_toy",     color: "var(--md-secondary-container)", onColor: "var(--md-on-secondary-container)", label: "Analyze",       desc: "Gemini 2.5 Flash watches the video — venue type, vibe, price signals" },
-                { icon: "map",           color: "var(--md-tertiary-container)",  onColor: "var(--md-on-tertiary-container)",  label: "Plan",          desc: "AI builds a real itinerary using Google Maps venue hours, ratings & photos" },
-                { icon: "chat_bubble",   color: "var(--md-primary-container)",   onColor: "var(--md-on-primary-container)",   label: "Vote via POKE", desc: "POKE texts your iMessage group — friends reply 👍 or 👎" },
-                { icon: "calendar_add_on", color: "var(--md-secondary-container)", onColor: "var(--md-on-secondary-container)", label: "Schedule",    desc: "Quorum reached? Scheduling agent books Google Calendar for everyone" },
-              ].map(({ icon, color, onColor, label, desc }, i, arr) => (
-                <div key={label}>
-                  {i > 0 && <div className="md-divider" style={{ marginLeft: 72 }} />}
-                  <div className="md-list-item" style={{ minHeight: 72, padding: "12px 16px" }}>
-                    <div className="md-list-item__leading" style={{ background: color, color: onColor }}>
-                      <span className="material-symbols-rounded" style={{ fontSize: 20 }}>{icon}</span>
-                    </div>
-                    <div className="md-list-item__content">
-                      <p className="md-list-item__headline" style={{ fontWeight: 500, fontSize: 15 }}>{label}</p>
-                      <p className="md-list-item__supporting">{desc}</p>
-                    </div>
-                    <div className="md-list-item__trailing">
-                      <span className="md-label-lg" style={{ color: "var(--md-on-surface-variant)", opacity: 0.6 }}>{i + 1}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+          {/* Error */}
+          {error && (
+            <div className="flex items-start gap-3 rounded-2xl bg-red-50 p-4 text-[#EF4444]">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+              <p className="text-sm">{error}</p>
             </div>
-          </div>
-        )}
-      </main>
+          )}
 
-      {/* Spinner keyframe */}
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
-    </div>
+          {/* Vibe analysis */}
+          {videoContext && (
+            <div className="anim-fade-up"><VibeChips context={videoContext} /></div>
+          )}
+
+          {/* Itinerary */}
+          {itinerary && (
+            <div className="anim-fade-up"><ItineraryExplorer itinerary={itinerary} /></div>
+          )}
+
+          {/* Event / voting */}
+          {event && stage !== "idle" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="font-mono text-[11px] text-[#A8A29E]">event · {event.id.slice(0, 8)}…</p>
+                <Link
+                  href={`/events/${event.id}`}
+                  className="flex items-center gap-1 text-xs font-medium text-[#F97316] transition-colors hover:text-[#EA580C]"
+                >
+                  Open event <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+
+              <VoteCard event={event} onRefresh={async () => {
+                const res = await fetch(`/api/events/${event.id}`)
+                const data = await res.json()
+                if (data.event) setEvent(data.event)
+              }} />
+
+              {(stage === "voting" || stage === "quorum_reached") && (
+                <DemoVotePanel event={event} onVote={handleDemoVote} />
+              )}
+
+              {/* Confirmed */}
+              {stage === "confirmed" && event.scheduled_time && (
+                <div className="card-shadow rounded-2xl border border-[#E7E5E4] bg-white py-8 text-center">
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#ECFDF5]">
+                    <CalendarCheck className="h-8 w-8 text-[#10B981]" />
+                  </div>
+                  <h2 className="font-editorial text-xl font-semibold text-[#1C1917]">You&apos;re all set!</h2>
+                  <p className="mx-auto mt-2 mb-6 max-w-[320px] text-sm text-[#78716C]">
+                    <strong className="text-[#1C1917]">{event.itinerary.title}</strong> is locked in for{" "}
+                    <strong className="text-[#1C1917]">{formatTime(event.scheduled_time)}</strong>.
+                    Calendar invites sent to all confirmed members.
+                  </p>
+                  <button
+                    className="inline-flex items-center gap-1.5 rounded-[10px] bg-[#F5F5F4] px-4 py-2 text-sm font-medium text-[#1C1917] transition-colors hover:bg-[#E7E5E4]"
+                    onClick={() => { setStage("idle"); setVideoContext(null); setItinerary(null); setEvent(null) }}
+                  >
+                    <Plus className="h-4 w-4" /> Plan another event
+                  </button>
+                </div>
+              )}
+
+              {origin && <McpCard event={event} origin={origin} />}
+            </div>
+          )}
+        </main>
+      </div>
+    </>
   )
 }
