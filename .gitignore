@@ -22,7 +22,7 @@
 .DS_Store
 *.pem
 
-# downloaded videos
+# downloaded videos & sidecar files
 /downloads
 
 # debug
@@ -33,6 +33,9 @@ pnpm-debug.log*
 
 # env files
 .env*.local
+
+# Instagram / TikTok auth for yt-dlp (export from browser; never commit real cookies)
+cookies.txt
 
 # typescript
 *.tsbuildinfo

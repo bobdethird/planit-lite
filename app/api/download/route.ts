@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import path from "path"
 import fs from "fs"
+import { execFile } from "child_process"
+import { promisify } from "util"
+
+const execFileAsync = promisify(execFile)
 
 const DOWNLOADS_DIR = path.join(process.cwd(), "downloads")
+const COOKIES_PATH = path.join(process.cwd(), "cookies.txt")
+const YTDLP_PATH = "/usr/local/bin/yt-dlp"
 
 const ALLOWED_HOSTS = [
   "instagram.com",
@@ -56,18 +62,22 @@ export async function POST(request: NextRequest) {
 
     fs.mkdirSync(DOWNLOADS_DIR, { recursive: true })
 
-    const youtubedl = (await import("youtube-dl-exec")).default
+    const args = [
+      "--format", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+      "--output", path.join(DOWNLOADS_DIR, "%(id)s.%(ext)s"),
+      "--merge-output-format", "mp4",
+      "--no-check-certificates",
+      "--no-warnings",
+      "--add-header", "referer:https://www.tiktok.com/",
+    ]
 
-    const result = await youtubedl(url.trim(), {
-      format:
-        "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-      output: path.join(DOWNLOADS_DIR, "%(id)s.%(ext)s"),
-      mergeOutputFormat: "mp4",
-      noCheckCertificates: true,
-      noWarnings: true,
-      preferFreeFormats: false,
-      addHeader: ["referer:https://www.tiktok.com/"],
-    })
+    if (fs.existsSync(COOKIES_PATH)) {
+      args.push("--cookies", COOKIES_PATH)
+    }
+
+    args.push(url.trim())
+
+    await execFileAsync(YTDLP_PATH, args, { maxBuffer: 100 * 1024 * 1024 })
 
     const files = fs
       .readdirSync(DOWNLOADS_DIR)

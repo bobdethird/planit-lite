@@ -73,6 +73,31 @@ export async function DELETE(
     }
 
     fs.unlinkSync(filePath)
+
+    const transcriptPath = path.join(
+      DOWNLOADS_DIR,
+      `${decoded}.transcript.json`,
+    )
+    if (fs.existsSync(transcriptPath)) {
+      try {
+        fs.unlinkSync(transcriptPath)
+      } catch {
+        // best-effort cleanup
+      }
+    }
+
+    const analysisPath = path.join(
+      DOWNLOADS_DIR,
+      `${decoded}.analysis.json`,
+    )
+    if (fs.existsSync(analysisPath)) {
+      try {
+        fs.unlinkSync(analysisPath)
+      } catch {
+        // best-effort cleanup
+      }
+    }
+
     return NextResponse.json({ success: true })
   } catch (err: unknown) {
     const message =

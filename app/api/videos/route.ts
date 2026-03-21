@@ -31,6 +31,21 @@ export async function GET() {
             // corrupt transcript file, ignore
           }
         }
+
+        const analysisPath = path.join(
+          DOWNLOADS_DIR,
+          `${filename}.analysis.json`,
+        )
+        const hasAnalysis = fs.existsSync(analysisPath)
+        let analysis: unknown = null
+        if (hasAnalysis) {
+          try {
+            analysis = JSON.parse(fs.readFileSync(analysisPath, "utf-8"))
+          } catch {
+            analysis = null
+          }
+        }
+
         return {
           filename,
           url: `/api/videos/${encodeURIComponent(filename)}`,
@@ -38,6 +53,8 @@ export async function GET() {
           downloadedAt: stat.mtime.toISOString(),
           hasTranscript,
           transcript,
+          hasAnalysis,
+          analysis,
         }
       })
       .sort(
