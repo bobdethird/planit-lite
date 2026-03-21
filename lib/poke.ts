@@ -59,7 +59,7 @@ function buildPersonalizedMessage(trip: Trip, participant: Participant): string 
   const otherParticipants = trip.participants
     .filter((p) => p.name !== participant.name)
     .map((p) => p.name)
-    .join(", ");
+    .join(" and ");
 
   return [
     `Hey ${participant.name}! A trip has been approved and we need to find a time that works for everyone.`,
@@ -73,7 +73,9 @@ function buildPersonalizedMessage(trip: Trip, participant: Participant): string 
     "",
     `The other participants are: ${otherParticipants}.`,
     "",
-    `Please check my Google Calendar and help me find a time when I'm free for ${trip.duration}. Then confirm with me which dates work best.`,
+    `Please check my Google Calendar and help me figure out when I'm free for ${trip.duration}. Once we agree on dates, use the PlanIt integration to submit my availability by calling submit_availability with trip_id "${trip.id}", participant_name "${participant.name}", and the dates I'm available in YYYY-MM-DD format.`,
+    "",
+    `You can also call get_current_availability with trip_id "${trip.id}" to see what the other participants have submitted so far and whether there's an overlapping time that works for everyone.`,
   ].join("\n");
 }
 
