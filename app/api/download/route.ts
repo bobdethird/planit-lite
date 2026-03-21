@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
       "--no-check-certificates",
       "--no-warnings",
       "--add-header", "referer:https://www.tiktok.com/",
+      "--print", "after_move:filepath",
     ]
 
     if (fs.existsSync(COOKIES_PATH)) {
@@ -77,18 +78,13 @@ export async function POST(request: NextRequest) {
 
     args.push(url.trim())
 
-    await execFileAsync(YTDLP_PATH, args, { maxBuffer: 100 * 1024 * 1024 })
+    const { stdout } = await execFileAsync(YTDLP_PATH, args, { maxBuffer: 100 * 1024 * 1024 })
 
-    const files = fs
-      .readdirSync(DOWNLOADS_DIR)
-      .filter((f) => f.endsWith(".mp4"))
-      .sort(
-        (a, b) =>
-          fs.statSync(path.join(DOWNLOADS_DIR, b)).mtimeMs -
-          fs.statSync(path.join(DOWNLOADS_DIR, a)).mtimeMs,
-      )
-
-    const latestFile = files[0]
+    // yt-dlp prints the actual output filepath via --print after_move:filepath
+    const printedPath = stdout.trim().split("\n").pop()?.trim()
+    const latestFile = printedPath && fs.existsSync(printedPath)
+      ? path.basename(printedPath)
+      : null
 
     if (!latestFile) {
       return NextResponse.json(

@@ -57,29 +57,46 @@ function markerSvg(num: number, active: boolean): string {
 }
 
 // ── Build map stops from itinerary ────────────────────────────────────────────
+// Dedup first by location_name (exact string), then by lat/lng proximity.
+// This prevents duplicate markers when the same venue appears across multiple
+// agenda steps with slightly different geocoded coordinates.
 
 function buildMapStops(itinerary: Itinerary): MapStop[] {
   const stops: MapStop[] = []
-  const seen = new Map<string, number>()
+  // Primary key: normalized location_name; Secondary key: "lat4,lng4"
+  const seenByName = new Map<string, number>()
+  const seenByCoord = new Map<string, number>()
 
   const addOrMerge = (lat: number, lng: number, label: string, idx: number) => {
-    const key = `${lat.toFixed(4)},${lng.toFixed(4)}`
-    if (seen.has(key)) {
-      stops[seen.get(key)!].agendaIndices.push(idx)
-    } else {
-      seen.set(key, stops.length)
-      stops.push({ lat, lng, label, stopNumber: stops.length + 1, agendaIndices: [idx] })
+    const nameKey = label.toLowerCase().trim()
+    const coordKey = `${lat.toFixed(3)},${lng.toFixed(3)}` // ~110m tolerance
+
+    // If we've seen this venue name before, merge into that stop
+    if (seenByName.has(nameKey)) {
+      stops[seenByName.get(nameKey)!].agendaIndices.push(idx)
+      return
     }
+    // If we've seen coords close by, merge (catches venues with no name)
+    if (seenByCoord.has(coordKey)) {
+      const stopIdx = seenByCoord.get(coordKey)!
+      stops[stopIdx].agendaIndices.push(idx)
+      seenByName.set(nameKey, stopIdx)
+      return
+    }
+
+    const stopIdx = stops.length
+    seenByName.set(nameKey, stopIdx)
+    seenByCoord.set(coordKey, stopIdx)
+    stops.push({ lat, lng, label, stopNumber: stopIdx + 1, agendaIndices: [idx] })
   }
 
   itinerary.agenda.forEach((item, i) => {
-    if (item.lat && item.lng) {
-      addOrMerge(item.lat, item.lng, item.location_name || itinerary.venue_name, i)
-    } else if (itinerary.place_details?.lat && itinerary.place_details?.lng) {
-      addOrMerge(itinerary.place_details.lat, itinerary.place_details.lng, itinerary.venue_name, i)
+    if (item.lat && item.lng && item.location_name) {
+      addOrMerge(item.lat, item.lng, item.location_name, i)
     }
   })
 
+  // Fallback: single-stop plan using the main venue
   if (stops.length === 0 && itinerary.place_details?.lat && itinerary.place_details?.lng) {
     stops.push({
       lat: itinerary.place_details.lat,
@@ -93,6 +110,15 @@ function buildMapStops(itinerary: Itinerary): MapStop[] {
   return stops
 }
 
+// ── Haversine distance (meters) between two lat/lng points ───────────────────
+function haversineM(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371000
+  const dLat = (b.lat - a.lat) * Math.PI / 180
+  const dLng = (b.lng - a.lng) * Math.PI / 180
+  const sin2 = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(sin2), Math.sqrt(1 - sin2))
+}
+
 // ── Time formatter ────────────────────────────────────────────────────────────
 
 function fmtTime(offsetMin: number): string {
@@ -102,30 +128,67 @@ function fmtTime(offsetMin: number): string {
   return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`
 }
 
-// ── Travel time pill ──────────────────────────────────────────────────────────
+// ── Stop transition divider ───────────────────────────────────────────────────
 
-function TravelPill({ minutes }: { minutes: number }) {
-  const label = minutes < 60
-    ? `${minutes} min drive`
-    : `${Math.floor(minutes / 60)}h ${minutes % 60}m drive`
+function StopTransition({ stop, travelMin }: { stop: MapStop; travelMin?: number }) {
+  const travelLabel = travelMin
+    ? travelMin < 60
+      ? `${travelMin} min`
+      : `${Math.floor(travelMin / 60)}h ${travelMin % 60}m`
+    : null
+
   return (
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 6,
-      padding: "6px 16px 6px 48px",
-    }}>
+    <div style={{ margin: "4px 0" }}>
+      {/* Travel time row */}
+      {travelLabel && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "6px 16px 6px 16px",
+        }}>
+          <div style={{ width: 28, display: "flex", justifyContent: "center", flexShrink: 0 }}>
+            <div style={{ width: 1, height: 20, background: "var(--md-outline-variant)" }} />
+          </div>
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "3px 10px",
+            borderRadius: "var(--md-shape-full)",
+            background: "var(--md-secondary-container)",
+            color: "var(--md-on-secondary-container)",
+          }}>
+            <span className="material-symbols-rounded" style={{ fontSize: 13 }}>directions_walk</span>
+            <span className="md-label-sm">{travelLabel} away</span>
+          </div>
+        </div>
+      )}
+      {/* New stop header */}
       <div style={{
         display: "flex",
         alignItems: "center",
-        gap: 6,
-        padding: "4px 12px",
-        borderRadius: "var(--md-shape-full)",
-        background: "var(--md-secondary-container)",
-        color: "var(--md-on-secondary-container)",
+        gap: 10,
+        padding: "8px 16px 4px",
+        background: "var(--md-container-low)",
+        borderTop: "1px solid var(--md-outline-variant)",
+        borderBottom: "1px solid var(--md-outline-variant)",
       }}>
-        <span className="material-symbols-rounded" style={{ fontSize: 14 }}>directions_car</span>
-        <span className="md-label-md">{label}</span>
+        <div style={{
+          width: 22,
+          height: 22,
+          borderRadius: "var(--md-shape-full)",
+          background: "var(--md-primary)",
+          color: "var(--md-on-primary)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          font: "700 11px/1 Roboto",
+          flexShrink: 0,
+        }}>
+          {stop.stopNumber}
+        </div>
+        <span className="md-label-lg" style={{ color: "var(--md-on-surface)", fontWeight: 600 }}>
+          {stop.label}
+        </span>
       </div>
     </div>
   )
@@ -294,13 +357,20 @@ export function ItineraryExplorer({ itinerary }: { itinerary: Itinerary }) {
     })
 
     if (isMultiStop) {
-      // Use DirectionsService for real road routes
+      // Pick travel mode: walking if all legs are short city distances, else driving
+      let totalDist = 0
+      for (let i = 1; i < mapStops.length; i++) totalDist += haversineM(mapStops[i - 1], mapStops[i])
+      const avgLegDist = totalDist / (mapStops.length - 1)
+      const travelMode = avgLegDist < 1200
+        ? window.google.maps.TravelMode.WALKING
+        : window.google.maps.TravelMode.DRIVING
+
       const directionsService = new window.google.maps.DirectionsService()
       const directionsRenderer = new window.google.maps.DirectionsRenderer({
-        suppressMarkers: true, // use our custom numbered markers
+        suppressMarkers: true,
         polylineOptions: {
-          strokeColor: "#1a73e8",
-          strokeOpacity: 0.75,
+          strokeColor: travelMode === window.google.maps.TravelMode.WALKING ? "#188038" : "#1a73e8",
+          strokeOpacity: 0.8,
           strokeWeight: 4,
         },
         map,
@@ -318,28 +388,28 @@ export function ItineraryExplorer({ itinerary }: { itinerary: Itinerary }) {
         origin,
         destination,
         waypoints,
-        travelMode: window.google.maps.TravelMode.DRIVING,
+        travelMode,
         optimizeWaypoints: false,
-      }, (result, status) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }, (result: any, status: any) => {
         if (status === "OK" && result) {
           directionsRenderer.setDirections(result)
+          // fitBounds from the directions result itself
+          const routeBounds = result.routes[0]?.bounds
+          if (routeBounds) map.fitBounds(routeBounds, { top: 64, right: 64, bottom: 80, left: 64 })
         } else {
-          // Fallback: simple polyline if Directions fails
+          // Fallback straight-line polyline
           new window.google.maps.Polyline({
             path: mapStops.map(s => ({ lat: s.lat, lng: s.lng })),
             strokeColor: "#1a73e8",
             strokeOpacity: 0.6,
             strokeWeight: 3,
+            geodesic: true,
             map,
           })
-          map.fitBounds(bounds, 48)
+          map.fitBounds(bounds, { top: 64, right: 64, bottom: 80, left: 64 })
         }
       })
-
-      // Fit bounds after directions
-      setTimeout(() => {
-        if (mapStops.length > 0) map.fitBounds(bounds, { top: 56, right: 56, bottom: 56, left: 56 })
-      }, 600)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady])
@@ -468,26 +538,36 @@ export function ItineraryExplorer({ itinerary }: { itinerary: Itinerary }) {
           </div>
 
           {/* Steps */}
-          <div style={{ flex: 1, overflowY: "auto", position: "relative" }}>
-            {/* Vertical connector line */}
-            <div style={{
-              position: "absolute",
-              left: 29,
-              top: 0,
-              bottom: 0,
-              width: 1,
-              background: "var(--md-outline-variant)",
-              pointerEvents: "none",
-            }} />
+          <div style={{ flex: 1, overflowY: "auto" }}>
+            {/* First stop header */}
+            {isMultiStop && mapStops[0] && (
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "8px 16px 4px",
+                background: "var(--md-container-low)",
+                borderBottom: "1px solid var(--md-outline-variant)",
+              }}>
+                <div style={{
+                  width: 22, height: 22, borderRadius: "var(--md-shape-full)",
+                  background: "var(--md-primary)", color: "var(--md-on-primary)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  font: "700 11px/1 Roboto", flexShrink: 0,
+                }}>1</div>
+                <span className="md-label-lg" style={{ color: "var(--md-on-surface)", fontWeight: 600 }}>
+                  {mapStops[0].label}
+                </span>
+              </div>
+            )}
 
             {itinerary.agenda.map((item, i) => {
               const stop = stopForItem(i)
-              const isNewStop = stop && i === stop.agendaIndices[0] && stop.stopNumber > 1
+              const isFirstOfNewStop = stop && i === stop.agendaIndices[0] && stop.stopNumber > 1
               return (
                 <div key={i}>
-                  {/* Travel time pill before first item at a new stop */}
-                  {isNewStop && item.travel_time_min && (
-                    <TravelPill minutes={item.travel_time_min} />
+                  {isFirstOfNewStop && (
+                    <StopTransition stop={stop} travelMin={item.travel_time_min} />
                   )}
                   <StopCard
                     item={item}

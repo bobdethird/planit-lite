@@ -23,10 +23,10 @@ const PlanningOutputSchema = z.object({
       time_offset_min: z.number().describe("Minutes from event start"),
       activity: z.string().describe("Specific activity with context — not generic"),
       location_name: z.string().optional().describe(
-        "Specific named location for this stop — use the full venue/place name when it's a distinct location (e.g. 'The Interval Bar', 'Sightglass Coffee'), or a named area within the main venue (e.g. 'Rooftop terrace', 'Main bar'). Omit for logistical steps like 'walk to next stop'."
+        "The full, searchable name of the standalone venue or place for this stop (e.g. 'Sightglass Coffee', 'Dolores Park', 'The Interval Bar'). ONLY set this for physically distinct locations that a person travels to — never use room names, sections, or areas within the same building (e.g. do NOT use 'Rooftop terrace' or 'Main bar'). Omit for transition steps like 'walk to next stop' or 'head inside'."
       ),
     })
-  ).describe("Realistic step-by-step agenda; include distinct named locations for multi-venue plans"),
+  ).describe("Multi-stop itinerary visiting 3-5 distinct real venues in the city; every venue stop must have a unique location_name that is a real, searchable place name"),
 })
 
 // ─── Google Maps Places API ───────────────────────────────────────────────────
@@ -132,13 +132,21 @@ async function geocodeLocation(
   mapsKey: string
 ): Promise<{ lat: number; lng: number } | null> {
   try {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${mapsKey}`
-    const res = await fetch(url)
+    // Use Places Text Search — more accurate for venue names than Geocoding API
+    const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": mapsKey,
+        "X-Goog-FieldMask": "places.location",
+      },
+      body: JSON.stringify({ textQuery: query, maxResultCount: 1, languageCode: "en" }),
+    })
     if (!res.ok) return null
     const data = await res.json()
-    const loc = data.results?.[0]?.geometry?.location
+    const loc = data.places?.[0]?.location
     if (!loc) return null
-    return { lat: loc.lat, lng: loc.lng }
+    return { lat: loc.latitude, lng: loc.longitude }
   } catch {
     return null
   }
@@ -209,7 +217,7 @@ ${formatOpeningHours(placeDetails)}
 Use this REAL venue data. Build the agenda around the actual opening hours.`
       : `No Maps data available. Use your knowledge of ${location} venues.`
 
-    const prompt = `You are a local expert event planner. Create a realistic, contextual event itinerary.
+    const prompt = `You are a local expert event planner. Create a realistic multi-stop night-out itinerary visiting several distinct venues.
 
 Video analysis:
 - Venue type: ${vc.venue_type}
@@ -223,8 +231,10 @@ ${vc.audio_transcript ? `- Audio context: "${vc.audio_transcript.slice(0, 400)}"
 ${placeContext}
 
 Guidelines:
-- Make the agenda feel like a real plan from someone who's been there
-- Include specific details: what to order, where to sit, what to expect
+- Plan a route through 3-5 DISTINCT real venues in ${location} (e.g. start at a bar, walk to a restaurant, end at a rooftop or club)
+- Every venue must be a real, named, searchable place — use the exact business name so it can be found on Google Maps
+- Each agenda item at a new venue MUST have location_name set to that venue's full name
+- Include specific details: what to order, where to sit, what to expect at each stop
 - Account for travel time, parking, waits in the timeline
 - Suggest ideal arrival time based on venue type and hours
 - Suggested date window: ${nextWeekend.toISOString()} to ${twoWeeksOut.toISOString()}`
@@ -236,7 +246,7 @@ Guidelines:
     })
 
     // Geocode agenda stops (deduplicated by location_name)
-    let geocodedAgenda = plan.agenda as (typeof plan.agenda[0] & { lat?: number; lng?: number })[]
+    let geocodedAgenda = plan.agenda as (typeof plan.agenda[0] & { lat?: number; lng?: number; travel_time_min?: number })[]
     if (mapsKey) {
       // Build a map of location_name → coords
       const coordsCache = new Map<string, { lat: number; lng: number } | null>()
