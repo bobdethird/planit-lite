@@ -1,0 +1,113 @@
+import { NextRequest, NextResponse } from "next/server"
+import path from "path"
+import fs from "fs"
+
+const DOWNLOADS_DIR = path.join(process.cwd(), "downloads")
+
+const ALLOWED_HOSTS = [
+  "instagram.com",
+  "www.instagram.com",
+  "tiktok.com",
+  "www.tiktok.com",
+  "vm.tiktok.com",
+  "vt.tiktok.com",
+]
+
+function isValidUrl(urlString: string): URL | null {
+  try {
+    return new URL(urlString)
+  } catch {
+    return null
+  }
+}
+
+function isAllowedHost(url: URL): boolean {
+  return ALLOWED_HOSTS.some(
+    (host) => url.hostname === host || url.hostname.endsWith(`.${host}`),
+  )
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { url } = body as { url?: string }
+
+    if (!url || typeof url !== "string") {
+      return NextResponse.json(
+        { error: "Missing or invalid 'url' field" },
+        { status: 400 },
+      )
+    }
+
+    const parsed = isValidUrl(url.trim())
+    if (!parsed) {
+      return NextResponse.json(
+        { error: "Invalid URL format" },
+        { status: 400 },
+      )
+    }
+
+    if (!isAllowedHost(parsed)) {
+      return NextResponse.json(
+        { error: "Only Instagram and TikTok links are supported" },
+        { status: 400 },
+      )
+    }
+
+    fs.mkdirSync(DOWNLOADS_DIR, { recursive: true })
+
+    const youtubedl = (await import("youtube-dl-exec")).default
+
+    const result = await youtubedl(url.trim(), {
+      format:
+        "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+      output: path.join(DOWNLOADS_DIR, "%(id)s.%(ext)s"),
+      mergeOutputFormat: "mp4",
+      noCheckCertificates: true,
+      noWarnings: true,
+      preferFreeFormats: false,
+      addHeader: ["referer:https://www.tiktok.com/"],
+    })
+
+    const files = fs
+      .readdirSync(DOWNLOADS_DIR)
+      .filter((f) => f.endsWith(".mp4"))
+      .sort(
+        (a, b) =>
+          fs.statSync(path.join(DOWNLOADS_DIR, b)).mtimeMs -
+          fs.statSync(path.join(DOWNLOADS_DIR, a)).mtimeMs,
+      )
+
+    const latestFile = files[0]
+
+    if (!latestFile) {
+      return NextResponse.json(
+        { error: "Download completed but no MP4 file was found" },
+        { status: 500 },
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      filename: latestFile,
+      url: `/api/videos/${encodeURIComponent(latestFile)}`,
+    })
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : "Unknown error occurred"
+
+    const isAuthError =
+      message.includes("login") ||
+      message.includes("cookie") ||
+      message.includes("rate-limit")
+
+    return NextResponse.json(
+      {
+        error: isAuthError
+          ? "Instagram requires authentication. Place a cookies.txt file in the project root, or try a TikTok link instead."
+          : `Download failed: ${message}`,
+      },
+      { status: 500 },
+    )
+  }
+}
