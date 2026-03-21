@@ -26,6 +26,10 @@ export const ItineraryZodSchema = z.object({
     z.object({
       time_offset_min: z.number().describe("Minutes from event start"),
       activity: z.string().describe("What happens at this time"),
+      location_name: z.string().optional().describe("Specific spot/location name for this step"),
+      lat: z.number().optional(),
+      lng: z.number().optional(),
+      travel_time_min: z.number().optional(),
     })
   ),
 })

@@ -22,8 +22,11 @@ const PlanningOutputSchema = z.object({
     z.object({
       time_offset_min: z.number().describe("Minutes from event start"),
       activity: z.string().describe("Specific activity with context — not generic"),
+      location_name: z.string().optional().describe(
+        "Specific named location for this stop — use the full venue/place name when it's a distinct location (e.g. 'The Interval Bar', 'Sightglass Coffee'), or a named area within the main venue (e.g. 'Rooftop terrace', 'Main bar'). Omit for logistical steps like 'walk to next stop'."
+      ),
     })
-  ).describe("Realistic step-by-step agenda based on actual venue hours and travel context"),
+  ).describe("Realistic step-by-step agenda; include distinct named locations for multi-venue plans"),
 })
 
 // ─── Google Maps Places API ───────────────────────────────────────────────────
@@ -81,6 +84,61 @@ async function searchPlace(query: string, mapsKey: string): Promise<PlaceDetails
       lat: place.location?.latitude,
       lng: place.location?.longitude,
     }
+  } catch {
+    return null
+  }
+}
+
+// ─── Routes API — travel times between consecutive stops ──────────────────────
+
+async function getTravelTimes(
+  stops: Array<{ lat: number; lng: number }>,
+  mapsKey: string
+): Promise<number[]> {
+  if (stops.length < 2) return []
+  try {
+    const body = {
+      origin: { location: { latLng: { latitude: stops[0].lat, longitude: stops[0].lng } } },
+      destination: { location: { latLng: { latitude: stops[stops.length - 1].lat, longitude: stops[stops.length - 1].lng } } },
+      intermediates: stops.slice(1, -1).map(s => ({
+        location: { latLng: { latitude: s.lat, longitude: s.lng } },
+      })),
+      travelMode: "DRIVE",
+      routingPreference: "TRAFFIC_AWARE",
+    }
+    const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": mapsKey,
+        "X-Goog-FieldMask": "routes.legs.duration,routes.legs.distanceMeters",
+      },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) return []
+    const data = await res.json()
+    const legs = data.routes?.[0]?.legs ?? []
+    return legs.map((leg: { duration?: string }) => {
+      const secs = parseInt(leg.duration?.replace("s", "") ?? "0")
+      return Math.max(1, Math.round(secs / 60))
+    })
+  } catch {
+    return []
+  }
+}
+
+async function geocodeLocation(
+  query: string,
+  mapsKey: string
+): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${mapsKey}`
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const data = await res.json()
+    const loc = data.results?.[0]?.geometry?.location
+    if (!loc) return null
+    return { lat: loc.lat, lng: loc.lng }
   } catch {
     return null
   }
@@ -177,9 +235,65 @@ Guidelines:
       prompt,
     })
 
+    // Geocode agenda stops (deduplicated by location_name)
+    let geocodedAgenda = plan.agenda as (typeof plan.agenda[0] & { lat?: number; lng?: number })[]
+    if (mapsKey) {
+      // Build a map of location_name → coords
+      const coordsCache = new Map<string, { lat: number; lng: number } | null>()
+
+      // Pre-seed with main venue coords
+      if (placeDetails?.lat && placeDetails?.lng && placeDetails.name) {
+        coordsCache.set(placeDetails.name.toLowerCase(), { lat: placeDetails.lat, lng: placeDetails.lng })
+      }
+
+      // Collect unique location names to geocode
+      const uniqueNames = [...new Set(
+        plan.agenda
+          .map(item => item.location_name)
+          .filter((n): n is string => !!n && !coordsCache.has(n.toLowerCase()))
+      )]
+
+      await Promise.all(
+        uniqueNames.map(async (name) => {
+          const query = `${name}, ${vc.location_hint || "San Francisco"}`
+          const coords = await geocodeLocation(query, mapsKey)
+          coordsCache.set(name.toLowerCase(), coords)
+        })
+      )
+
+      // Assign coords to each agenda item
+      geocodedAgenda = plan.agenda.map(item => {
+        if (!item.location_name) return item
+        const coords = coordsCache.get(item.location_name.toLowerCase())
+        return coords ? { ...item, ...coords } : item
+      })
+
+      // Get travel times between distinct consecutive stops via Routes API
+      const distinctStops = geocodedAgenda.reduce<Array<{ lat: number; lng: number; firstIdx: number }>>((acc, item, i) => {
+        if (!item.lat || !item.lng) return acc
+        const prev = acc[acc.length - 1]
+        const isSameLocation = prev &&
+          Math.abs(prev.lat - item.lat) < 0.0002 &&
+          Math.abs(prev.lng - item.lng) < 0.0002
+        if (!isSameLocation) acc.push({ lat: item.lat, lng: item.lng, firstIdx: i })
+        return acc
+      }, [])
+
+      if (distinctStops.length >= 2) {
+        const times = await getTravelTimes(distinctStops, mapsKey)
+        // Assign travel_time_min to the first item at each new stop (except the first stop)
+        distinctStops.slice(1).forEach((stop, i) => {
+          if (times[i] !== undefined) {
+            geocodedAgenda[stop.firstIdx] = { ...geocodedAgenda[stop.firstIdx], travel_time_min: times[i] }
+          }
+        })
+      }
+    }
+
     // Override with real Maps data if available
     const itinerary: Itinerary = {
       ...plan,
+      agenda: geocodedAgenda,
       id: uuidv4(),
       created_at: new Date().toISOString(),
       video_context: vc as VideoContext,

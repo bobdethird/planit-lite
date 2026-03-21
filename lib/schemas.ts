@@ -27,6 +27,10 @@ export interface VideoContext {
 export interface AgendaItem {
   time_offset_min: number
   activity: string
+  location_name?: string  // specific spot name for this step
+  lat?: number
+  lng?: number
+  travel_time_min?: number  // travel time from the previous distinct stop (Routes API)
 }
 
 /** Real venue data from Google Maps Places API */
