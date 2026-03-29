@@ -5,9 +5,9 @@ export const VideoContextZodSchema = z.object({
   vibe: z.string(),
   activity_category: z.enum(["food", "outdoors", "nightlife", "culture", "sports", "other"]),
   location_hint: z.string().optional(),
-  price_range: z.enum(["free", "$", "$$", "$$$"]),
+  price_range: z.enum(["$", "$$", "$$$", "$$$$"]),
   duration_estimate_hrs: z.number(),
-  audio_transcript: z.string().optional(),
+  key_details: z.string().optional(),
 })
 
 export const ItineraryZodSchema = z.object({

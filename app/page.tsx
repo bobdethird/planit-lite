@@ -1,18 +1,21 @@
 "use client"
 
 import Link from "next/link"
-import { useState, useEffect, useRef } from "react"
-import type { VideoContext, Itinerary, Event as PlanItEvent } from "@/lib/schemas"
+import { useState, useEffect, useCallback } from "react"
+import type { VideoContext, Event as PlanItEvent } from "@/lib/schemas"
 import { ItineraryExplorer } from "@/components/ItineraryExplorer"
+import { HeroSection } from "@/components/HeroSection"
+import { HomeInputBar } from "@/components/HomeInputBar"
+import { ExampleCards } from "@/components/ExampleCards"
+import { PlatformHint } from "@/components/PlatformHint"
+import { usePipeline, type AppStage } from "@/lib/hooks/use-pipeline"
 import {
   Download,
-  Mic,
   Bot,
   Map,
   Vote,
   CalendarCheck,
   Send,
-  Link2,
   CheckCircle,
   XCircle,
   Check,
@@ -20,7 +23,6 @@ import {
   Zap,
   RefreshCw,
   FlaskConical,
-  Plug,
   Copy,
   ArrowRight,
   Plus,
@@ -36,21 +38,10 @@ import {
   CreditCard,
   Gem,
   Loader2,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type AppStage =
-  | "idle"
-  | "downloading"
-  | "transcribing"
-  | "analyzing"
-  | "planning"
-  | "voting"
-  | "quorum_reached"
-  | "scheduling"
-  | "confirmed"
 
 type AnimPhase = "logo" | "shrink" | "app"
 
@@ -60,16 +51,15 @@ const PIPELINE: {
   icon: React.ElementType
   sub: string
 }[] = [
-  { stage: "downloading", label: "Download", icon: Download, sub: "yt-dlp → mp4" },
-  { stage: "transcribing", label: "Transcribe", icon: Mic, sub: "ElevenLabs Scribe v2" },
-  { stage: "analyzing", label: "Analyze", icon: Bot, sub: "Gemini 3 Flash Preview" },
-  { stage: "planning", label: "Plan", icon: Map, sub: "Gemini + Google Maps" },
-  { stage: "voting", label: "Vote", icon: Vote, sub: "POKE iMessage" },
-  { stage: "confirmed", label: "Confirm", icon: CalendarCheck, sub: "Google Calendar" },
+  { stage: "downloading", label: "Download", icon: Download, sub: "Grabbing your video" },
+  { stage: "analyzing", label: "Analyze", icon: Bot, sub: "Reading the vibe" },
+  { stage: "planning", label: "Plan", icon: Map, sub: "Crafting your itinerary" },
+  { stage: "voting", label: "Vote", icon: Vote, sub: "Waiting on the crew" },
+  { stage: "confirmed", label: "Confirm", icon: CalendarCheck, sub: "Locking it in" },
 ]
 
 const PIPELINE_ORDER: AppStage[] = [
-  "downloading", "transcribing", "analyzing", "planning", "voting", "confirmed",
+  "downloading", "analyzing", "planning", "voting", "scheduling", "confirmed",
 ]
 
 function formatTime(iso: string) {
@@ -86,7 +76,7 @@ function PlanItLogo({ size = 20, animate = false }: { size?: number; animate?: b
     <svg viewBox="0 0 512 512" width={size} height={size}>
       <path
         d="M256 62 C186 62 130 118 130 188 C130 268 256 430 256 430 C256 430 382 268 382 188 C382 118 326 62 256 62Z"
-        fill="#F97316"
+        fill="#E8713A"
       />
       <ellipse
         cx="256" cy="198" rx="155" ry="38"
@@ -98,7 +88,7 @@ function PlanItLogo({ size = 20, animate = false }: { size?: number; animate?: b
         } : undefined}
       />
       <circle cx="256" cy="182" r="20" fill="#FEFCE8" opacity="0.9" />
-      <circle cx="256" cy="182" r="8.5" fill="#F97316" />
+      <circle cx="256" cy="182" r="8.5" fill="#E8713A" />
     </svg>
   )
 }
@@ -110,21 +100,18 @@ function LaunchOverlay({ phase }: { phase: AnimPhase }) {
 
   return (
     <>
-      {/* Black backdrop */}
       <div
-        className="fixed inset-0 z-[100] bg-[#0C0A09]"
+        className="fixed inset-0 z-[100] bg-black"
         style={{
           opacity: phase === "shrink" ? 0 : 1,
           transition: "opacity 0.5s ease-out 0.1s",
         }}
       />
-
-      {/* Animated logo */}
       <div
         className="fixed z-[110]"
         style={{
-          top: phase === "logo" ? "50%" : "14px",
-          left: phase === "logo" ? "50%" : "20px",
+          top: phase === "logo" ? "50%" : "11px",
+          left: phase === "logo" ? "50%" : "16px",
           transform: phase === "logo" ? "translate(-50%, -50%)" : "none",
           width: phase === "logo" ? "120px" : "32px",
           height: phase === "logo" ? "120px" : "32px",
@@ -138,7 +125,7 @@ function LaunchOverlay({ phase }: { phase: AnimPhase }) {
           style={phase === "logo" ? {
             animation: "glow-pulse 1.5s ease-in-out 0.5s 2",
           } : {
-            background: "#0C0A09",
+            background: "black",
             borderRadius: "8px",
             padding: "6px",
           }}
@@ -161,17 +148,17 @@ function VibeChips({ context }: { context: VideoContext }) {
     culture: Landmark, sports: Dumbbell, other: Compass,
   }
   const priceIcon: Record<string, React.ElementType> = {
-    free: DollarSign, $: DollarSign, $$: CreditCard, $$$: Gem,
+    $: DollarSign, $$: CreditCard, $$$: Gem, $$$$: Gem,
   }
   const CatIcon = catIcon[context.activity_category] ?? Compass
   const PriceIcon = priceIcon[context.price_range] ?? DollarSign
 
   return (
-    <div className="card-shadow rounded-2xl border border-[#E7E5E4] bg-white p-5">
+    <div className="card-shadow rounded-2xl bg-[#F5F5F5] p-5">
       <div className="mb-4 flex items-center gap-2.5">
         <div className="h-2 w-2 rounded-full bg-[#10B981]" />
-        <span className="text-sm font-semibold text-[#1C1917]">Vibe analysis</span>
-        <span className="ml-auto text-xs text-[#A8A29E]">Gemini 3 Flash Preview</span>
+        <span className="text-sm font-semibold text-black">Vibe analysis</span>
+        <span className="ml-auto text-xs text-[#888]">AI-powered</span>
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
@@ -183,22 +170,22 @@ function VibeChips({ context }: { context: VideoContext }) {
         ].map(({ Icon, label }) => (
           <span
             key={label}
-            className="inline-flex items-center gap-1.5 rounded-[10px] bg-[#F5F5F4] px-3 py-1.5 text-xs font-medium text-[#1C1917]"
+            className="card-shadow inline-flex items-center gap-1.5 rounded-3xl bg-white px-3 py-1.5 text-xs font-medium text-black"
           >
-            <Icon className="h-3.5 w-3.5 text-[#78716C]" />
+            <Icon className="h-3.5 w-3.5 text-[#888]" />
             {label}
           </span>
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-4">
         {[
           { label: "Venue type", value: context.venue_type },
           { label: "Vibe", value: context.vibe },
         ].map(({ label, value }) => (
-          <div key={label} className="rounded-xl bg-[#F5F5F4] p-3">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-[#A8A29E]">{label}</p>
-            <p className="mt-1 text-sm font-semibold text-[#1C1917]">{value}</p>
+          <div key={label}>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[#888]">{label}</p>
+            <p className="mt-1 text-sm font-semibold text-black">{value}</p>
           </div>
         ))}
       </div>
@@ -212,26 +199,25 @@ function PipelineCard({ stage }: { stage: AppStage }) {
   const StepIcon = step?.icon ?? Loader2
 
   return (
-    <div className="card-shadow rounded-2xl border border-[#E7E5E4] bg-white p-5">
+    <div className="card-shadow rounded-2xl bg-white p-5">
       <div className="mb-5 flex items-center gap-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#FFF7ED]">
-          <StepIcon className="h-5 w-5 text-[#F97316]" style={{ animation: "spin 1.5s linear infinite" }} />
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#FFF2E8]">
+          <StepIcon className="h-5 w-5 text-[#E8713A]" style={{ animation: "spin 1.5s linear infinite" }} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-[#1C1917]">
+          <p className="text-sm font-semibold text-black">
             {stage === "downloading" && "Downloading your reel…"}
-            {stage === "transcribing" && "Transcribing audio…"}
-            {stage === "analyzing" && "Gemini is watching the video…"}
+            {stage === "analyzing" && "Reading the vibe…"}
             {stage === "planning" && "Building your itinerary…"}
             {stage === "scheduling" && "Finding the best time…"}
           </p>
-          <p className="mt-0.5 text-xs text-[#A8A29E]">{step?.sub}</p>
+          <p className="mt-0.5 text-xs text-[#888]">{step?.sub}</p>
         </div>
       </div>
 
-      <div className="mb-3 h-1 overflow-hidden rounded-full bg-[#F5F5F4]">
+      <div className="mb-3 h-1 overflow-hidden rounded-full bg-[#F5F5F5]">
         <div
-          className="h-full rounded-full bg-[#F97316]"
+          className="h-full rounded-full bg-[#E8713A]"
           style={{ width: "35%", animation: "indeterminate 1.6s infinite cubic-bezier(0.4,0,0.2,1)" }}
         />
       </div>
@@ -244,15 +230,15 @@ function PipelineCard({ stage }: { stage: AppStage }) {
           return (
             <div key={s} className="flex flex-1 items-center gap-1">
               <div className={cn(
-                "flex h-6 flex-1 items-center justify-center rounded-md transition-colors",
-                done ? "bg-[#F97316] text-white"
-                  : active ? "bg-[#FFF7ED] text-[#F97316]"
-                  : "bg-[#F5F5F4] text-[#A8A29E]"
+                "flex h-6 flex-1 items-center justify-center rounded-[10px] transition-colors",
+                done ? "bg-[#E8713A] text-white"
+                  : active ? "bg-[#FFF2E8] text-[#E8713A]"
+                  : "bg-[#F5F5F5] text-[#888]"
               )}>
-                {done ? <Check className="h-3 w-3" /> : <span className="text-[10px] font-medium">{label}</span>}
+                {done ? <Check className="h-3 w-3" /> : <span className="text-[10px] font-semibold">{label}</span>}
               </div>
               {i < PIPELINE.length - 1 && (
-                <div className={cn("h-px w-1 shrink-0", done ? "bg-[#F97316]" : "bg-[#E7E5E4]")} />
+                <div className={cn("h-px w-1 shrink-0", done ? "bg-[#E8713A]" : "bg-[#F5F5F5]")} />
               )}
             </div>
           )
@@ -262,52 +248,56 @@ function PipelineCard({ stage }: { stage: AppStage }) {
   )
 }
 
-const AVATAR_COLORS = ["#F97316", "#3B82F6", "#10B981", "#8B5CF6", "#EC4899", "#EAB308"]
+const AVATAR_COLORS = ["#E8713A", "#3B82F6", "#10B981", "#8B5CF6", "#EC4899", "#EAB308"]
 
-function VoteCard({ event, onRefresh }: { event: PlanItEvent; onRefresh: () => void }) {
+function VoteCard({ event, onRefresh, onVote, pokeButton }: {
+  event: PlanItEvent
+  onRefresh: () => void
+  onVote?: (phone: string, vote: "yes" | "no") => void
+  pokeButton?: React.ReactNode
+}) {
   const yes = event.votes.filter((v) => v.vote === "yes").length
   const total = event.group.members.length
   const pct = Math.min(100, (yes / total) * 100)
   const quorum = Math.ceil(total * event.quorum_threshold)
 
   return (
-    <div className="card-shadow overflow-hidden rounded-2xl border border-[#E7E5E4] bg-white">
-      <div className="flex items-center justify-between border-b border-[#F5F5F4] px-5 py-3">
-        <span className="text-sm font-semibold text-[#1C1917]">Group vote</span>
+    <div className="card-shadow overflow-hidden rounded-2xl bg-white">
+      {/* Progress bar at very top */}
+      <div className="h-1 bg-[#F5F5F5]">
+        <div
+          className="h-full rounded-r-full bg-[#E8713A] transition-all"
+          style={{ width: `${pct}%`, transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)" }}
+        />
+      </div>
+
+      <div className="flex items-center justify-between px-5 py-3">
+        <div>
+          <span className="text-sm font-bold text-black">Group vote</span>
+          <p className="text-xs text-[#888]">{yes} of {total} responded · need {quorum}</p>
+        </div>
         <div className="flex items-center gap-2">
           <span className={cn(
-            "inline-flex items-center gap-1 rounded-[10px] px-2.5 py-1 text-[11px] font-semibold",
+            "inline-flex items-center gap-1 rounded-3xl px-2.5 py-1 text-[11px] font-semibold",
             event.status === "confirmed"
               ? "bg-[#ECFDF5] text-[#10B981]"
-              : "bg-[#FFF7ED] text-[#F97316]"
+              : "bg-[#FFF2E8] text-[#E8713A]"
           )}>
             {event.status === "confirmed" ? "Confirmed" : "Voting"}
           </span>
-          <button onClick={onRefresh} className="rounded-lg p-1.5 text-[#A8A29E] transition-colors hover:bg-[#F5F5F4] hover:text-[#1C1917]" aria-label="Refresh">
+          <button onClick={onRefresh} className="rounded-xl p-1.5 text-[#888] transition-colors hover:bg-[#F5F5F5]" aria-label="Refresh">
             <RefreshCw className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      <div className="px-5 pt-4">
-        <p className="mb-2 text-xs text-[#78716C]">
-          {yes} of {total} responded · need {quorum} for quorum
-        </p>
-        <div className="h-1.5 overflow-hidden rounded-full bg-[#F5F5F4]">
-          <div
-            className="h-full rounded-full bg-[#F97316] transition-all"
-            style={{ width: `${pct}%`, transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)" }}
-          />
-        </div>
-      </div>
-
-      <div className="divide-y divide-[#F5F5F4] px-5">
+      <div className="px-5">
         {event.group.members.map((member, mi) => {
           const vote = event.votes.find((v) => v.user_id === member.id)
           const initial = member.name[0]?.toUpperCase() ?? "?"
           const color = AVATAR_COLORS[mi % AVATAR_COLORS.length]
           return (
-            <div key={member.id} className="flex items-center gap-3 py-3">
+            <div key={member.id} className="flex items-center gap-3 border-t border-[rgba(0,0,0,0.04)] py-3">
               <div
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
                 style={{ backgroundColor: color }}
@@ -315,8 +305,8 @@ function VoteCard({ event, onRefresh }: { event: PlanItEvent; onRefresh: () => v
                 {initial}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-[#1C1917]">{member.name}</p>
-                <p className="text-xs text-[#A8A29E]">{member.phone}</p>
+                <p className="text-sm font-semibold text-black">{member.name}</p>
+                <p className="text-xs text-[#888]">{member.phone}</p>
               </div>
               <div className="shrink-0">
                 {vote ? (
@@ -330,7 +320,7 @@ function VoteCard({ event, onRefresh }: { event: PlanItEvent; onRefresh: () => v
                     </span>
                   )
                 ) : (
-                  <span className="text-xs text-[#A8A29E]">Waiting…</span>
+                  <span className="text-xs text-[#888]">Waiting…</span>
                 )}
               </div>
             </div>
@@ -339,9 +329,9 @@ function VoteCard({ event, onRefresh }: { event: PlanItEvent; onRefresh: () => v
       </div>
 
       {event.status === "quorum_reached" && (
-        <div className="mx-5 mb-4 flex items-center gap-2.5 rounded-xl bg-[#FFF7ED] p-3">
-          <Zap className="h-4 w-4 shrink-0 text-[#F97316]" />
-          <p className="text-xs font-medium text-[#F97316]">Quorum reached! Finding the best time…</p>
+        <div className="mx-5 mb-4 flex items-center gap-2.5 rounded-xl bg-[#FFF2E8] p-3">
+          <Zap className="h-4 w-4 shrink-0 text-[#E8713A]" />
+          <p className="text-xs font-medium text-[#E8713A]">Quorum reached! Finding the best time…</p>
         </div>
       )}
       {event.status === "confirmed" && event.scheduled_time && (
@@ -352,16 +342,69 @@ function VoteCard({ event, onRefresh }: { event: PlanItEvent; onRefresh: () => v
           </p>
         </div>
       )}
+
+      {/* Integrated POKE button */}
+      {pokeButton && (
+        <div className="border-t border-[rgba(0,0,0,0.04)] px-5 py-3">
+          {pokeButton}
+        </div>
+      )}
     </div>
+  )
+}
+
+function PokeNotifyButton({ eventId }: { eventId: string }) {
+  const [pokeState, setPokeState] = useState<"idle" | "sending" | "sent" | "error">("idle")
+  const [pokeResult, setPokeResult] = useState<{ succeeded: number; failed: number } | null>(null)
+
+  const sendPoke = useCallback(async () => {
+    setPokeState("sending")
+    try {
+      const res = await fetch("/api/poke-notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event_id: eventId }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setPokeState("error"); return }
+      setPokeResult({ succeeded: data.succeeded, failed: data.failed })
+      setPokeState("sent")
+    } catch {
+      setPokeState("error")
+    }
+  }, [eventId])
+
+  return (
+    <button
+      onClick={sendPoke}
+      disabled={pokeState === "sending" || pokeState === "sent"}
+      className={cn(
+        "flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-all",
+        pokeState === "sent"
+          ? "bg-[#ECFDF5] text-[#10B981]"
+          : pokeState === "error"
+            ? "bg-red-50 text-[#EF4444] hover:bg-red-100"
+            : "bg-[#E8713A] text-white hover:brightness-110 disabled:opacity-50"
+      )}
+    >
+      {pokeState === "sending" && <Loader2 className="h-4 w-4 animate-spin" />}
+      {pokeState === "sent" && <CheckCircle className="h-4 w-4" />}
+      {pokeState === "idle" && <Send className="h-4 w-4" />}
+      {pokeState === "error" && <AlertCircle className="h-4 w-4" />}
+      {pokeState === "sending" ? "Sending via iMessage…"
+        : pokeState === "sent" ? `Sent! ${pokeResult?.succeeded ?? 0} delivered`
+        : pokeState === "error" ? "Retry sending"
+        : "Send POKE iMessage to group"}
+    </button>
   )
 }
 
 function DemoVotePanel({ event, onVote }: { event: PlanItEvent; onVote: (phone: string, vote: "yes" | "no") => void }) {
   return (
-    <div className="card-shadow rounded-2xl border border-[#E7E5E4] bg-white p-5">
-      <div className="mb-3 flex items-center gap-2 text-[#A8A29E]">
+    <div className="rounded-2xl bg-[#F5F5F5] p-4">
+      <div className="mb-3 flex items-center gap-2 text-[#888]">
         <FlaskConical className="h-4 w-4" />
-        <p className="text-xs font-medium">Demo — simulate friend votes</p>
+        <p className="text-xs font-semibold">Demo — simulate friend votes</p>
       </div>
       <div className="grid grid-cols-2 gap-2">
         {event.group.members.map((member) => {
@@ -373,14 +416,14 @@ function DemoVotePanel({ event, onVote }: { event: PlanItEvent; onVote: (phone: 
                 "flex items-center justify-between rounded-xl p-3 transition-colors",
                 voted?.vote === "yes" ? "bg-[#ECFDF5]"
                   : voted?.vote === "no" ? "bg-red-50"
-                  : "bg-[#F5F5F4]"
+                  : "bg-white"
               )}
             >
               <span className={cn(
                 "text-sm font-medium",
                 voted?.vote === "yes" ? "text-[#10B981]"
                   : voted?.vote === "no" ? "text-[#EF4444]"
-                  : "text-[#1C1917]"
+                  : "text-black"
               )}>{member.name}</span>
               <div className="flex gap-1">
                 {(["yes", "no"] as const).map((v) => (
@@ -410,7 +453,7 @@ function McpCard({ event, origin }: { event: PlanItEvent; origin: string }) {
   const tools = ["get_group_contacts", "get_itinerary", "get_member_availability", "record_vote", "confirm_event"]
 
   return (
-    <div className="overflow-hidden rounded-2xl bg-[#1C1917] p-5">
+    <div className="overflow-hidden rounded-2xl bg-black p-5">
       <div className="mb-3 flex items-center gap-2.5">
         <div className="relative flex h-2 w-2 items-center justify-center">
           <span className="absolute inline-flex h-full w-full rounded-full bg-[#10B981] opacity-75" style={{ animation: "pulse-green 2s infinite" }} />
@@ -454,15 +497,11 @@ function McpCard({ event, origin }: { event: PlanItEvent; origin: string }) {
 
 export default function Page() {
   const [url, setUrl] = useState("")
-  const [stage, setStage] = useState<AppStage>("idle")
-  const [error, setError] = useState<string | null>(null)
-  const [videoContext, setVideoContext] = useState<VideoContext | null>(null)
-  const [itinerary, setItinerary] = useState<Itinerary | null>(null)
-  const [event, setEvent] = useState<PlanItEvent | null>(null)
+  const [{ stage, error, videoContext, itinerary, event }, actions] = usePipeline()
   const [origin, setOrigin] = useState("")
   const [scrolled, setScrolled] = useState(false)
   const [phase, setPhase] = useState<AnimPhase>("logo")
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [devOpen, setDevOpen] = useState(false)
 
   useEffect(() => { setOrigin(window.location.origin) }, [])
   useEffect(() => {
@@ -471,105 +510,47 @@ export default function Page() {
     return () => window.removeEventListener("scroll", onScroll)
   }, [])
 
-  // Launch animation
   useEffect(() => {
     const t1 = setTimeout(() => setPhase("shrink"), 1600)
     const t2 = setTimeout(() => setPhase("app"), 2200)
     return () => { clearTimeout(t1); clearTimeout(t2) }
   }, [])
 
-  // Poll event during voting
   useEffect(() => {
-    if (!event || !["voting", "quorum_reached"].includes(event.status)) {
-      if (pollRef.current) clearInterval(pollRef.current)
-      return
-    }
-    pollRef.current = setInterval(async () => {
+    async function checkClipboard() {
+      if (stage !== "idle" && stage !== "confirmed") return
       try {
-        const res = await fetch(`/api/events/${event.id}`)
-        const data = await res.json()
-        if (data.event) {
-          setEvent(data.event)
-          if (data.event.status === "confirmed") { setStage("confirmed"); clearInterval(pollRef.current!) }
-        }
-      } catch { /* ignore */ }
-    }, 3000)
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [event?.id, event?.status])
-
-  async function triggerSchedule(eventId: string) {
-    await fetch("/api/schedule", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ event_id: eventId }),
-    })
-  }
+        const text = await navigator.clipboard.readText()
+        const match = text.match(/https?:\/\/(?:(?:www|vm|vt)\.)?tiktok\.com\/[^\s)]+/i)
+          || text.match(/https?:\/\/(?:www\.)?instagram\.com\/[^\s)]+/i)
+        if (match) setUrl(match[0])
+      } catch { /* clipboard denied */ }
+    }
+    window.addEventListener("focus", checkClipboard)
+    checkClipboard()
+    return () => window.removeEventListener("focus", checkClipboard)
+  }, [stage])
 
   async function handleAnalyze() {
     const trimmed = url.trim()
     if (!trimmed) return
-    setError(null); setVideoContext(null); setItinerary(null); setEvent(null)
-
-    setStage("downloading")
-    let filename: string
-    try {
-      const res = await fetch("/api/download", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: trimmed }) })
-      const data = await res.json()
-      if (!res.ok) { setError(data.error || "Download failed"); setStage("idle"); return }
-      filename = data.filename
-    } catch { setError("Download failed. Check your URL and try again."); setStage("idle"); return }
-
-    setStage("transcribing")
-    try { await fetch("/api/transcribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename }) }) }
-    catch { /* non-fatal */ }
-
-    setStage("analyzing")
-    let vc: VideoContext
-    try {
-      const res = await fetch("/api/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename }) })
-      const data = await res.json()
-      if (!res.ok) { setError(data.error || "Analysis failed"); setStage("idle"); return }
-      vc = data.videoContext; setVideoContext(vc)
-    } catch { setError("Gemini analysis failed"); setStage("idle"); return }
-
-    setStage("planning")
-    let plan: Itinerary
-    try {
-      const res = await fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ videoContext: vc }) })
-      const data = await res.json()
-      if (!res.ok) { setError(data.error || "Planning failed"); setStage("idle"); return }
-      plan = data.itinerary; setItinerary(plan)
-    } catch { setError("Planning failed"); setStage("idle"); return }
-
-    try {
-      const res = await fetch("/api/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itinerary: plan }) })
-      const data = await res.json()
-      if (!res.ok) { setError(data.error || "Failed to create event"); setStage("idle"); return }
-      setEvent(data.event); setStage("voting"); setUrl("")
-    } catch { setError("Failed to create event"); setStage("idle") }
+    setUrl("")
+    await actions.run(trimmed)
   }
 
-  async function handleDemoVote(phone: string, vote: "yes" | "no") {
-    if (!event) return
-    try {
-      await fetch("/api/vote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event_id: event.id, phone, vote }) })
-      const res = await fetch(`/api/events/${event.id}`)
-      const data = await res.json()
-      if (data.event) {
-        setEvent(data.event)
-        if (data.event.status === "quorum_reached") {
-          setStage("scheduling")
-          await triggerSchedule(data.event.id)
-          const res2 = await fetch(`/api/events/${event.id}`)
-          const data2 = await res2.json()
-          if (data2.event) { setEvent(data2.event); if (data2.event.status === "confirmed") setStage("confirmed") }
-        }
-      }
-    } catch { /* ignore */ }
+  function handlePaste(e: React.ClipboardEvent<HTMLInputElement>) {
+    const text = e.clipboardData.getData("text")
+    const match = text.match(/https?:\/\/(?:(?:www|vm|vt)\.)?tiktok\.com\/[^\s)]+/i)
+      || text.match(/https?:\/\/(?:www\.)?instagram\.com\/[^\s)]+/i)
+    if (match) {
+      e.preventDefault()
+      const extracted = match[0]
+      setUrl(extracted)
+      setTimeout(() => { setUrl(""); actions.run(extracted) }, 150)
+    }
   }
 
-  const isProcessing = ["downloading", "transcribing", "analyzing", "planning", "scheduling"].includes(stage)
+  const isProcessing = ["downloading", "analyzing", "planning", "scheduling"].includes(stage)
   const showInput = stage === "idle" || stage === "confirmed"
   const appVisible = phase === "app"
 
@@ -581,78 +562,91 @@ export default function Page() {
         {/* ── Sticky Top Bar ──────────────────────────────────────────── */}
         <header
           className={cn(
-            "sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-[#E7E5E4] bg-white/80 px-5 backdrop-blur-2xl transition-shadow",
-            scrolled && "shadow-sm"
+            "sticky top-0 z-40 flex items-center gap-2.5 bg-[#FAF9F6] px-4 transition-shadow",
+            scrolled && "shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
           )}
+          style={{
+            borderBottom: "1px solid rgba(0,0,0,0.06)",
+            paddingTop: "env(safe-area-inset-top, 0px)",
+            minHeight: "calc(48px + env(safe-area-inset-top, 0px))",
+          }}
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0C0A09]">
-            <PlanItLogo size={20} />
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-black">
+            <PlanItLogo size={17} />
           </div>
-          <span className="font-editorial text-base font-semibold text-[#1C1917]">PlanIt</span>
+          <span className="text-lg font-bold text-black">PlanIt</span>
 
           <div className="ml-auto flex items-center gap-2">
             {stage !== "idle" && (
               <span className={cn(
-                "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                "inline-flex items-center gap-1 rounded-3xl px-2.5 py-1 text-[11px] font-semibold",
                 stage === "confirmed" ? "bg-[#ECFDF5] text-[#10B981]"
-                  : isProcessing ? "bg-[#FFF7ED] text-[#F97316]"
-                  : "bg-[#FFF7ED] text-[#F97316]"
+                  : "bg-[#E8713A] text-white"
               )}>
-                {isProcessing && <Loader2 className="h-3 w-3" style={{ animation: "spin 1s linear infinite" }} />}
+                {isProcessing && <Loader2 className="h-3 w-3 animate-spin" />}
                 {stage === "confirmed" && <CheckCircle className="h-3 w-3" />}
-                {stage === "confirmed" ? "Confirmed!" : stage === "voting" ? "Voting open" : stage.charAt(0).toUpperCase() + stage.slice(1) + "…"}
+                {stage === "confirmed" ? "Confirmed"
+                  : stage === "voting" ? "Voting"
+                  : stage === "quorum_reached" ? "Quorum"
+                  : stage === "downloading" ? "Downloading"
+                  : stage === "analyzing" ? "Analyzing"
+                  : stage === "planning" ? "Planning"
+                  : stage === "scheduling" ? "Scheduling"
+                  : "Active"}
               </span>
             )}
           </div>
         </header>
 
         {/* ── Content ─────────────────────────────────────────────────── */}
-        <main className="space-y-5 overflow-x-hidden px-5 pt-6">
-          {/* Hero */}
-          <div className="anim-fade-up" style={{ animationDelay: "0s" }}>
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-[#F97316]">
-              Zero to Agent Hackathon SF
-            </p>
-            <h2 className="font-editorial text-[28px] font-semibold leading-tight text-[#1C1917]">
-              Drop a reel.<br />We&apos;ll plan the night.
-            </h2>
-            <p className="mt-3 text-sm leading-relaxed text-[#78716C]">
-              Gemini reads the vibe, Google Maps finds the venue, POKE texts your
-              group on iMessage, and everyone&apos;s calendar gets booked.
-            </p>
-          </div>
-
-          {/* Input bar */}
-          {showInput && (
-            <form onSubmit={(e) => { e.preventDefault(); handleAnalyze() }} className="anim-fade-up" style={{ animationDelay: "0.1s" }}>
-              <div className="card-shadow flex items-center gap-2 rounded-2xl border border-[#E7E5E4] bg-white p-2">
-                <Link2 className="ml-2 h-5 w-5 shrink-0 text-[#A8A29E]" />
-                <input
-                  value={url}
-                  onChange={(e) => { setUrl(e.target.value); setError(null) }}
-                  placeholder="Paste a TikTok or Instagram reel link…"
-                  className="min-w-0 flex-1 border-0 bg-transparent text-sm text-[#1C1917] outline-none placeholder:text-[#A8A29E]"
-                />
-                <button
-                  type="submit"
-                  disabled={!url.trim()}
-                  className="flex min-h-[36px] items-center gap-1.5 rounded-[10px] bg-[#1C1917] px-4 text-sm font-medium text-white transition-all hover:bg-[#292524] disabled:opacity-30"
-                >
-                  <Send className="h-3.5 w-3.5" />
-                  Analyze
-                </button>
+        <main className="space-y-6 overflow-x-hidden px-4 pt-6 pb-8">
+          {/* Itinerary title card (when itinerary exists) */}
+          {itinerary && !isProcessing && (
+            <div className="anim-fade-in-card">
+              <h1 className="text-2xl font-bold tracking-tight text-black">{itinerary.title}</h1>
+              <div className="mt-1.5 flex items-center gap-2">
+                <p className="text-sm text-[#888]">
+                  {itinerary.venue_name}
+                  {itinerary.suggested_date_range?.start && (
+                    <> · {new Date(itinerary.suggested_date_range.start).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</>
+                  )}
+                </p>
+                {stage !== "idle" && (
+                  <span className="rounded-3xl bg-[#E8713A] px-2 py-0.5 text-[10px] font-semibold text-white">
+                    {stage === "confirmed" ? "Confirmed" : "Live"}
+                  </span>
+                )}
               </div>
-            </form>
+            </div>
+          )}
+
+          {/* Idle home screen */}
+          {showInput && (
+            <>
+              <HeroSection />
+              <HomeInputBar
+                url={url}
+                setUrl={setUrl}
+                onSubmit={handleAnalyze}
+                onPaste={handlePaste}
+              />
+              {stage === "idle" && (
+                <>
+                  <ExampleCards />
+                  <PlatformHint />
+                </>
+              )}
+            </>
           )}
 
           {/* Pipeline */}
           {isProcessing && (
-            <div className="anim-fade-up"><PipelineCard stage={stage} /></div>
+            <div className="anim-fade-in-card"><PipelineCard stage={stage} /></div>
           )}
 
           {/* Error */}
           {error && (
-            <div className="flex items-start gap-3 rounded-2xl bg-red-50 p-4 text-[#EF4444]">
+            <div className="card-shadow flex items-start gap-3 rounded-2xl bg-red-50 p-4 text-[#EF4444]">
               <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
               <p className="text-sm">{error}</p>
             </div>
@@ -660,59 +654,74 @@ export default function Page() {
 
           {/* Vibe analysis */}
           {videoContext && (
-            <div className="anim-fade-up"><VibeChips context={videoContext} /></div>
+            <div className="anim-fade-in-card"><VibeChips context={videoContext} /></div>
           )}
 
           {/* Itinerary */}
           {itinerary && (
-            <div className="anim-fade-up"><ItineraryExplorer itinerary={itinerary} /></div>
+            <div className="anim-fade-in-card"><ItineraryExplorer itinerary={itinerary} /></div>
           )}
 
           {/* Event / voting */}
           {event && stage !== "idle" && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <p className="font-mono text-[11px] text-[#A8A29E]">event · {event.id.slice(0, 8)}…</p>
+                <p className="font-mono text-[11px] text-[#888]">event · {event.id.slice(0, 8)}…</p>
                 <Link
                   href={`/events/${event.id}`}
-                  className="flex items-center gap-1 text-xs font-medium text-[#F97316] transition-colors hover:text-[#EA580C]"
+                  className="flex items-center gap-1 text-xs font-semibold text-[#E8713A]"
                 >
                   Open event <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </div>
 
-              <VoteCard event={event} onRefresh={async () => {
-                const res = await fetch(`/api/events/${event.id}`)
-                const data = await res.json()
-                if (data.event) setEvent(data.event)
-              }} />
-
-              {(stage === "voting" || stage === "quorum_reached") && (
-                <DemoVotePanel event={event} onVote={handleDemoVote} />
-              )}
+              <VoteCard
+                event={event}
+                onRefresh={actions.refreshEvent}
+                pokeButton={(stage === "voting" || stage === "quorum_reached") ? <PokeNotifyButton eventId={event.id} /> : undefined}
+              />
 
               {/* Confirmed */}
               {stage === "confirmed" && event.scheduled_time && (
-                <div className="card-shadow rounded-2xl border border-[#E7E5E4] bg-white py-8 text-center">
+                <div className="card-shadow rounded-2xl bg-white py-8 text-center">
                   <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#ECFDF5]">
                     <CalendarCheck className="h-8 w-8 text-[#10B981]" />
                   </div>
-                  <h2 className="font-editorial text-xl font-semibold text-[#1C1917]">You&apos;re all set!</h2>
-                  <p className="mx-auto mt-2 mb-6 max-w-[320px] text-sm text-[#78716C]">
-                    <strong className="text-[#1C1917]">{event.itinerary.title}</strong> is locked in for{" "}
-                    <strong className="text-[#1C1917]">{formatTime(event.scheduled_time)}</strong>.
+                  <h2 className="text-xl font-bold text-black">You&apos;re all set!</h2>
+                  <p className="mx-auto mt-2 mb-6 max-w-[320px] text-sm text-[#888]">
+                    <strong className="text-black">{event.itinerary.title}</strong> is locked in for{" "}
+                    <strong className="text-black">{formatTime(event.scheduled_time)}</strong>.
                     Calendar invites sent to all confirmed members.
                   </p>
                   <button
-                    className="inline-flex items-center gap-1.5 rounded-[10px] bg-[#F5F5F4] px-4 py-2 text-sm font-medium text-[#1C1917] transition-colors hover:bg-[#E7E5E4]"
-                    onClick={() => { setStage("idle"); setVideoContext(null); setItinerary(null); setEvent(null) }}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#F5F5F5] px-4 py-2 text-sm font-semibold text-black transition-colors hover:bg-[#EBEBEB]"
+                    onClick={actions.reset}
                   >
                     <Plus className="h-4 w-4" /> Plan another event
                   </button>
                 </div>
               )}
 
-              {origin && <McpCard event={event} origin={origin} />}
+              {/* Developer Tools (collapsed by default) */}
+              {(stage === "voting" || stage === "quorum_reached" || origin) && (
+                <div className="pt-4">
+                  <button
+                    onClick={() => setDevOpen(!devOpen)}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold text-[#888] transition-colors hover:bg-[#F5F5F5]"
+                  >
+                    {devOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    {devOpen ? "Hide" : "Dev tools"}
+                  </button>
+                  {devOpen && (
+                    <div className="mt-3 space-y-3">
+                      {(stage === "voting" || stage === "quorum_reached") && (
+                        <DemoVotePanel event={event} onVote={actions.vote} />
+                      )}
+                      {origin && <McpCard event={event} origin={origin} />}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </main>

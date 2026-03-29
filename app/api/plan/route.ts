@@ -1,32 +1,31 @@
 import { NextRequest, NextResponse } from "next/server"
-import { generateObject } from "ai"
-import { google } from "@ai-sdk/google"
+import { GoogleGenerativeAI } from "@google/generative-ai"
 import { z } from "zod"
 import { VideoContextZodSchema } from "@/lib/zod-schemas"
 import { v4 as uuidv4 } from "uuid"
 import type { PlaceDetails, Itinerary, VideoContext } from "@/lib/schemas"
 
 const PlanningOutputSchema = z.object({
-  title: z.string().describe("Catchy event name, e.g. 'Rooftop Cocktail Night @ Charmaine's'"),
-  description: z.string().describe("2-3 sentence description of the event vibe"),
-  venue_name: z.string().describe("Specific venue name"),
-  venue_address: z.string().describe("Full address"),
-  venue_maps_url: z.string().describe("Google Maps URL for the venue"),
-  cost_per_person: z.string().describe("Estimated cost e.g. '$40-60/person' or 'Free'"),
-  duration_hrs: z.number().describe("Expected duration in hours"),
+  title: z.string(),
+  description: z.string(),
+  venue_name: z.string(),
+  venue_address: z.string(),
+  venue_maps_url: z.string(),
+  cost_per_person: z.string(),
+  duration_hrs: z.number(),
   suggested_date_range: z.object({
-    start: z.string().describe("ISO datetime for earliest suggested start (next weekend evening)"),
-    end: z.string().describe("ISO datetime for latest suggested end (2 weeks out)"),
+    start: z.string(),
+    end: z.string(),
   }),
   agenda: z.array(
     z.object({
-      time_offset_min: z.number().describe("Minutes from event start"),
-      activity: z.string().describe("Specific activity with context — not generic"),
-      location_name: z.string().optional().describe(
-        "The full, searchable name of the standalone venue or place for this stop (e.g. 'Sightglass Coffee', 'Dolores Park', 'The Interval Bar'). ONLY set this for physically distinct locations that a person travels to — never use room names, sections, or areas within the same building (e.g. do NOT use 'Rooftop terrace' or 'Main bar'). Omit for transition steps like 'walk to next stop' or 'head inside'."
-      ),
+      time_offset_min: z.number(),
+      activity: z.string(),
+      location_name: z.string().optional(),
+      lat: z.number().optional(),
+      lng: z.number().optional(),
     })
-  ).describe("Multi-stop itinerary visiting 3-5 distinct real venues in the city; every venue stop must have a unique location_name that is a real, searchable place name"),
+  ),
 })
 
 // ─── Google Maps Places API ───────────────────────────────────────────────────
@@ -132,7 +131,6 @@ async function geocodeLocation(
   mapsKey: string
 ): Promise<{ lat: number; lng: number } | null> {
   try {
-    // Use Places Text Search — more accurate for venue names than Geocoding API
     const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
       method: "POST",
       headers: {
@@ -180,8 +178,9 @@ export async function POST(request: NextRequest) {
 
     const vc = parsed.data
 
-    if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-      return NextResponse.json({ error: "GOOGLE_GENERATIVE_AI_API_KEY not configured" }, { status: 500 })
+    const geminiKey = process.env.GEMINI_API_KEY
+    if (!geminiKey) {
+      return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
     }
 
     // Try Google Maps Places lookup
@@ -217,46 +216,110 @@ ${formatOpeningHours(placeDetails)}
 Use this REAL venue data. Build the agenda around the actual opening hours.`
       : `No Maps data available. Use your knowledge of ${location} venues.`
 
-    const prompt = `You are a local expert event planner. Create a realistic multi-stop night-out itinerary visiting several distinct venues.
+    const prompt = `Create a realistic multi-stop night-out itinerary visiting several distinct venues.
 
-Video analysis:
+Video analysis from Gemini:
 - Venue type: ${vc.venue_type}
 - Vibe: ${vc.vibe}
 - Category: ${vc.activity_category}
 - Location: ${location}
 - Price range: ${vc.price_range}
 - Duration: ~${vc.duration_estimate_hrs} hours
-${vc.audio_transcript ? `- Audio context: "${vc.audio_transcript.slice(0, 400)}"` : ""}
+${vc.key_details ? `- Key details from video: ${vc.key_details}` : ""}
 
 ${placeContext}
 
 Guidelines:
-- Plan a route through 3-5 DISTINCT real venues in ${location} (e.g. start at a bar, walk to a restaurant, end at a rooftop or club)
-- Every venue must be a real, named, searchable place — use the exact business name so it can be found on Google Maps
+- Plan a route through 3-5 DISTINCT real venues in ${location}
+- Every venue must be a real, named, searchable place — use the exact business name
 - Each agenda item at a new venue MUST have location_name set to that venue's full name
-- Include specific details: what to order, where to sit, what to expect at each stop
-- Account for travel time, parking, waits in the timeline
-- Suggest ideal arrival time based on venue type and hours
-- Suggested date window: ${nextWeekend.toISOString()} to ${twoWeeksOut.toISOString()}`
+- Include specific details: what to order, where to sit, what to expect
+- Account for travel time between stops
+- Suggested date window: ${nextWeekend.toISOString()} to ${twoWeeksOut.toISOString()}
 
-    const { object: plan } = await generateObject({
-      model: google("gemini-3-flash-preview"),
-      schema: PlanningOutputSchema,
-      prompt,
+Return ONLY valid JSON matching this schema (no markdown fences, no extra text):
+{
+  "title": "Catchy event name",
+  "description": "2-3 sentence description",
+  "venue_name": "Primary venue name",
+  "venue_address": "Full address",
+  "venue_maps_url": "Google Maps URL",
+  "cost_per_person": "$40-60/person",
+  "duration_hrs": 4,
+  "suggested_date_range": {
+    "start": "ISO datetime",
+    "end": "ISO datetime"
+  },
+  "agenda": [
+    {
+      "time_offset_min": 0,
+      "activity": "Description of what happens",
+      "location_name": "Venue Name (only for distinct physical locations)",
+      "lat": 37.7749,
+      "lng": -122.4194
+    }
+  ]
+}
+
+IMPORTANT: Every agenda item that has a location_name MUST also include accurate lat and lng coordinates for that real venue. Use the actual GPS coordinates of each named venue.`
+
+    const genAI = new GoogleGenerativeAI(geminiKey)
+    const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash"
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      systemInstruction: "You are an expert local event planner. You create detailed, realistic multi-stop itineraries using real venue names and addresses. You always return valid JSON and nothing else — no markdown fences, no explanation text.",
     })
 
-    // Geocode agenda stops (deduplicated by location_name)
-    let geocodedAgenda = plan.agenda as (typeof plan.agenda[0] & { lat?: number; lng?: number; travel_time_min?: number })[]
+    let result
+    const MAX_RETRIES = 3
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        result = await model.generateContent(prompt)
+        break
+      } catch (err: unknown) {
+        const is503 = err instanceof Error && err.message.includes("503")
+        if (!is503 || attempt === MAX_RETRIES - 1) throw err
+        const delay = 1000 * 2 ** attempt
+        console.log(`[plan] 503 from Gemini, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`)
+        await new Promise(r => setTimeout(r, delay))
+      }
+    }
+
+    if (!result) throw new Error("Gemini request failed after retries")
+    const rawText = result.response.text().trim()
+
+    const jsonStr = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "")
+
+    let planData
+    try {
+      planData = JSON.parse(jsonStr)
+    } catch {
+      return NextResponse.json(
+        { error: "Gemini returned invalid JSON", raw: rawText },
+        { status: 502 },
+      )
+    }
+
+    const planValidated = PlanningOutputSchema.safeParse(planData)
+    if (!planValidated.success) {
+      return NextResponse.json(
+        { error: "Gemini output doesn't match schema", details: planValidated.error.flatten(), raw: planData },
+        { status: 502 },
+      )
+    }
+
+    const plan = planValidated.data
+
+    // Agenda already has lat/lng from Gemini; try to enhance with Google Places if available
+    let geocodedAgenda = plan.agenda as (typeof plan.agenda[0] & { travel_time_min?: number })[]
+
     if (mapsKey) {
-      // Build a map of location_name → coords
       const coordsCache = new Map<string, { lat: number; lng: number } | null>()
 
-      // Pre-seed with main venue coords
       if (placeDetails?.lat && placeDetails?.lng && placeDetails.name) {
         coordsCache.set(placeDetails.name.toLowerCase(), { lat: placeDetails.lat, lng: placeDetails.lng })
       }
 
-      // Collect unique location names to geocode
       const uniqueNames = [...new Set(
         plan.agenda
           .map(item => item.location_name)
@@ -271,36 +334,36 @@ Guidelines:
         })
       )
 
-      // Assign coords to each agenda item
       geocodedAgenda = plan.agenda.map(item => {
         if (!item.location_name) return item
-        const coords = coordsCache.get(item.location_name.toLowerCase())
-        return coords ? { ...item, ...coords } : item
+        const googleCoords = coordsCache.get(item.location_name.toLowerCase())
+        if (googleCoords) return { ...item, ...googleCoords }
+        return item
       })
-
-      // Get travel times between distinct consecutive stops via Routes API
-      const distinctStops = geocodedAgenda.reduce<Array<{ lat: number; lng: number; firstIdx: number }>>((acc, item, i) => {
-        if (!item.lat || !item.lng) return acc
-        const prev = acc[acc.length - 1]
-        const isSameLocation = prev &&
-          Math.abs(prev.lat - item.lat) < 0.0002 &&
-          Math.abs(prev.lng - item.lng) < 0.0002
-        if (!isSameLocation) acc.push({ lat: item.lat, lng: item.lng, firstIdx: i })
-        return acc
-      }, [])
-
-      if (distinctStops.length >= 2) {
-        const times = await getTravelTimes(distinctStops, mapsKey)
-        // Assign travel_time_min to the first item at each new stop (except the first stop)
-        distinctStops.slice(1).forEach((stop, i) => {
-          if (times[i] !== undefined) {
-            geocodedAgenda[stop.firstIdx] = { ...geocodedAgenda[stop.firstIdx], travel_time_min: times[i] }
-          }
-        })
-      }
     }
 
-    // Override with real Maps data if available
+    // Compute travel times between distinct stops that have coordinates
+    const distinctStops = geocodedAgenda.reduce<Array<{ lat: number; lng: number; firstIdx: number }>>((acc, item, i) => {
+      if (!item.lat || !item.lng) return acc
+      const prev = acc[acc.length - 1]
+      const isSameLocation = prev &&
+        Math.abs(prev.lat - item.lat) < 0.0002 &&
+        Math.abs(prev.lng - item.lng) < 0.0002
+      if (!isSameLocation) acc.push({ lat: item.lat, lng: item.lng, firstIdx: i })
+      return acc
+    }, [])
+
+    if (mapsKey && distinctStops.length >= 2) {
+      const times = await getTravelTimes(distinctStops, mapsKey)
+      distinctStops.slice(1).forEach((stop, i) => {
+        if (times[i] !== undefined) {
+          geocodedAgenda[stop.firstIdx] = { ...geocodedAgenda[stop.firstIdx], travel_time_min: times[i] }
+        }
+      })
+    }
+
+    console.log("[plan] agenda stops with coords:", geocodedAgenda.filter(a => a.lat && a.lng).length, "/", geocodedAgenda.length)
+
     const itinerary: Itinerary = {
       ...plan,
       agenda: geocodedAgenda,

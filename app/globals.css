@@ -1,46 +1,55 @@
-@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=DM+Sans:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 
 :root {
-  --background: #FAFAF9;
+  /* Bottom tab bar: one source of truth for body scroll gutter + fixed nav */
+  --planit-nav-tab-height: 3.25rem;
+  --planit-sab: env(safe-area-inset-bottom, 0px);
+  --planit-body-pad-bottom: calc(var(--planit-nav-tab-height) + var(--planit-sab));
+
+  --background: #FAF9F6;
   --foreground: #1C1917;
   --card: #FFFFFF;
   --card-foreground: #1C1917;
   --popover: #FFFFFF;
   --popover-foreground: #1C1917;
-  --primary: #F97316;
+  --primary: #E8713A;
   --primary-foreground: #FFFFFF;
-  --secondary: #F5F5F4;
+  --secondary: #F5F3EF;
   --secondary-foreground: #1C1917;
-  --muted: #F5F5F4;
-  --muted-foreground: #78716C;
-  --accent: #F5F5F4;
-  --accent-foreground: #1C1917;
+  --muted: #F5F3EF;
+  --muted-foreground: #888888;
+  --accent: #E8713A;
+  --accent-foreground: #FFFFFF;
   --destructive: #EF4444;
-  --border: #E7E5E4;
-  --input: #E7E5E4;
-  --ring: #F97316;
+  --border: rgba(0, 0, 0, 0.06);
+  --input: #F5F3EF;
+  --ring: #E8713A;
   --success: #10B981;
-  --chart-1: #F97316;
+  --text: #1C1917;
+  --text-secondary: #44403C;
+  --text-muted: #A8A29E;
+  --bg: #FAF9F6;
+  --bg-muted: #F5F3EF;
+  --chart-1: #E8713A;
   --chart-2: #FDBA74;
   --chart-3: #10B981;
   --chart-4: #3B82F6;
   --chart-5: #8B5CF6;
-  --sidebar: #FAFAF9;
+  --sidebar: #FAF9F6;
   --sidebar-foreground: #1C1917;
-  --sidebar-primary: #F97316;
+  --sidebar-primary: #E8713A;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #F5F5F4;
+  --sidebar-accent: #F5F3EF;
   --sidebar-accent-foreground: #1C1917;
-  --sidebar-border: #E7E5E4;
-  --sidebar-ring: #F97316;
+  --sidebar-border: rgba(0, 0, 0, 0.06);
+  --sidebar-ring: #E8713A;
 }
 
 @theme inline {
-  --font-sans: 'DM Sans', system-ui, sans-serif;
-  --font-heading: 'DM Sans', system-ui, sans-serif;
-  --font-serif: 'Source Serif 4', Georgia, serif;
+  --font-sans: var(--font-body), -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --font-heading: var(--font-heading), "Source Serif 4", Georgia, serif;
+  --font-serif: var(--font-heading), "Source Serif 4", Georgia, serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -78,8 +87,8 @@
   --radius-lg: 16px;
   --radius-xl: 16px;
   --radius-2xl: 16px;
-  --radius-3xl: 16px;
-  --radius-4xl: 16px;
+  --radius-3xl: 24px;
+  --radius-4xl: 24px;
 }
 
 @layer base {
@@ -88,30 +97,42 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'DM Sans', system-ui, sans-serif;
+    font-family: var(--font-body), -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    color: #1C1917;
+    padding-bottom: var(--planit-body-pad-bottom);
   }
 }
 
-/* Editorial card shadow */
-.card-shadow {
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+/* PWA / standalone: WebKit sometimes leaves extra bottom inset as if the Safari toolbar were still there */
+@media (display-mode: standalone) {
+  :root {
+    /* Cap pathological inset when WebKit still reserves “browser chrome” space in standalone */
+    --planit-sab: min(env(safe-area-inset-bottom, 0px), 3.5rem);
+  }
 }
 
-/* Serif headline utility */
+.font-heading {
+  font-family: var(--font-heading), "Source Serif 4", Georgia, serif;
+}
+
+.card-shadow {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
 .font-editorial {
-  font-family: 'Source Serif 4', Georgia, serif;
+  font-weight: 700;
   letter-spacing: -0.025em;
 }
 
-/* Launch animation keyframes */
 @keyframes ring-draw {
   from { stroke-dashoffset: 700; }
   to { stroke-dashoffset: 0; }
 }
 
 @keyframes glow-pulse {
-  0%, 100% { filter: drop-shadow(0 0 20px rgba(249, 115, 22, 0.3)); }
-  50% { filter: drop-shadow(0 0 40px rgba(249, 115, 22, 0.6)); }
+  0%, 100% { filter: drop-shadow(0 0 20px rgba(232, 113, 58, 0.3)); }
+  50% { filter: drop-shadow(0 0 40px rgba(232, 113, 58, 0.6)); }
 }
 
 @keyframes fade-up {
@@ -122,6 +143,11 @@
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@keyframes fade-in-card {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes pulse-green {
@@ -141,3 +167,8 @@
 .anim-fade-up {
   animation: fade-up 0.5s ease-out both;
 }
+
+.anim-fade-in-card {
+  animation: fade-in-card 0.4s ease-out both;
+}
+

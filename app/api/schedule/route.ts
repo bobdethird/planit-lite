@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getEvent, saveEvent } from "@/lib/store"
+import { getGCalAccessToken } from "@/lib/google-auth"
 import type { Event } from "@/lib/schemas"
 
 /**
@@ -104,7 +105,11 @@ function confirmedMemberNames(event: Event | undefined): string[] {
     .map((m) => m.name)
 }
 
-/** Create GCal events for yes-voters who have `gcal_token`. Returns new IDs (may merge with existing). */
+/**
+ * Create GCal events for yes-voters.
+ * Per-member gcal_token is tried first; if none are set, falls back
+ * to a shared OAuth refresh token (creates event on the demo user's calendar).
+ */
 async function ensureGCalEvents(event: Event): Promise<string[]> {
   const existing = [...(event.gcal_event_ids ?? [])]
 
@@ -115,12 +120,18 @@ async function ensureGCalEvents(event: Event): Promise<string[]> {
 
   const newIds: string[] = []
 
+  const sharedToken = await getGCalAccessToken()
+  let usedSharedToken = false
+
   for (const member of confirmedMembers) {
-    if (!member.gcal_token) continue
+    const token = member.gcal_token || (!usedSharedToken ? sharedToken : null)
+    if (!token) continue
+
+    if (!member.gcal_token && sharedToken) usedSharedToken = true
 
     try {
       const calEventId = await createGCalEvent(
-        member.gcal_token,
+        token,
         event.itinerary.title,
         event.itinerary.description,
         scheduled,

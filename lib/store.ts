@@ -66,9 +66,9 @@ function seedDemoGroup() {
       id: "demo-group-1",
       name: "The Squad",
       members: [
-        { id: "m1", name: "Veer", phone: "+16504445287" },
-        { id: "m2", name: "Caden", phone: "+15162341156" },
-        { id: "m3", name: "Jaiyen", phone: "+15599173739" },
+        { id: "m1", name: "Veer", phone: "+16504445287", pokeEnvKey: "POKE_API_KEY_VEER" },
+        { id: "m2", name: "Caden", phone: "+15162341156", pokeEnvKey: "POKE_API_KEY_CADEN" },
+        { id: "m3", name: "Jaiyen", phone: "+15599173739", pokeEnvKey: "POKE_API_KEY_JAIYEN" },
       ],
     }
     store.groups.set(demoGroup.id, demoGroup)

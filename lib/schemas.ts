@@ -11,7 +11,7 @@ export type ActivityCategory =
   | "sports"
   | "other"
 
-export type PriceRange = "free" | "$" | "$$" | "$$$"
+export type PriceRange = "$" | "$$" | "$$$" | "$$$$"
 
 /** What an LLM might return after analyzing a video */
 export interface VideoContext {
@@ -21,7 +21,7 @@ export interface VideoContext {
   location_hint?: string
   price_range: PriceRange
   duration_estimate_hrs: number
-  audio_transcript?: string
+  key_details?: string
 }
 
 export interface AgendaItem {
@@ -77,6 +77,7 @@ export interface Member {
   name: string
   phone: string
   gcal_token?: string
+  pokeEnvKey?: string
 }
 
 export interface Group {

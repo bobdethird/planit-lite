@@ -2,8 +2,7 @@
 const nextConfig = {
   serverExternalPackages: [
     "youtube-dl-exec",
-    "@elevenlabs/elevenlabs-js",
-    "@ai-sdk/google",
+    "@google/generative-ai",
   ],
 }
 
